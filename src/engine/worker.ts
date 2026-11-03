@@ -13,7 +13,7 @@ declare const self: DedicatedWorkerGlobalScope;
 const modules = import.meta.glob('../../engine/pvsim/*.py', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 const engineFiles = Object.fromEntries(Object.entries(modules).map(([path, src]) => [path.split('/').pop()!, src]));
 
-const ALLOWED: EngineMethod[] = ['info', 'set_weather', 'set_load_csv', 'clear_load_csv', 'simulate', 'optimise', 'hourly_csv'];
+const ALLOWED: EngineMethod[] = ['info', 'set_weather', 'set_load_csv', 'clear_load_csv', 'simulate', 'optimise', 'hourly_csv', 'advise'];
 
 const post = (msg: WorkerMessage) => self.postMessage(msg);
 

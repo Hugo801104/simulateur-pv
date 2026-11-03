@@ -3,12 +3,14 @@
  * Aucun calcul scientifique ici : tout passe par le moteur Python (src/engine).
  */
 import { browserCache } from './data/cache';
+import { searchAddress, type AddressMatch } from './data/geocode';
 import { fetchWeather, lastCompleteYear, SOURCE_LABELS, type SourceChoice } from './data/weather';
 import { EngineClient } from './engine/client';
-import type { EngineResult, FieldError, OptimisationRow, SimulationResult, OptimisationResult } from './engine/types';
+import type { AdviceResult, EngineResult, FieldError, OptimisationRow, SimulationResult, OptimisationResult } from './engine/types';
+import { drawAdviceCharts, renderAdvice } from './ui/advice';
 import { cashflowChart, dailyChart, monthlyChart, onThemeChange, optimisationChart } from './ui/charts';
-import { clearSavedForm, collectParams, formEntries, groupErrors, readUi, restoreForm, saveForm, showFieldErrors } from './ui/form';
-import { num } from './ui/format';
+import { clearSavedForm, collectHouse, collectParams, formEntries, groupErrors, readUi, restoreForm, saveForm, showFieldErrors } from './ui/form';
+import { escapeHtml, num } from './ui/format';
 import { renderOptimisation, renderSimulation, showMessages, type MessageLevel } from './ui/results';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -38,7 +40,9 @@ const engine = new EngineClient(new URL('pyodide/', document.baseURI).href, {
   onBootError: (message) => {
     statusBox.classList.add('error');
     statusText.textContent = 'Moteur indisponible';
-    showMessages([{ level: 'error', text: `Le moteur de calcul n'a pas pu démarrer : ${message}. Rechargez la page ; si le problème persiste, votre navigateur ne prend peut-être pas en charge WebAssembly.` }]);
+    const text = `Le moteur de calcul n'a pas pu démarrer : ${message}. Rechargez la page ; si le problème persiste, votre navigateur ne prend peut-être pas en charge WebAssembly.`;
+    showMessages([{ level: 'error', text }]);
+    showMessages([{ level: 'error', text }], 'advice-messages');
   },
 });
 
@@ -73,6 +77,7 @@ form.addEventListener('change', () => {
 function setBusy(busy: boolean, label?: string) {
   btnSimulate.disabled = busy || !engineReady;
   btnOptimise.disabled = busy || !engineReady;
+  $<HTMLButtonElement>('btn-advise').disabled = busy || !engineReady;
   if (busy && label) statusText.textContent = label;
   else if (engineReady) statusText.textContent = 'Moteur de calcul prêt';
 }
@@ -86,39 +91,57 @@ function setStatus(el: HTMLElement, text: string, state: 'ok' | 'bad' | '' = '')
   el.className = `status-line ${state}`;
 }
 
+/** Météo du mode expert : fichier PVGIS déjà chargé, ou source en ligne choisie. */
 async function ensureWeather(): Promise<string[]> {
   const ui = readUi(form);
   if (ui.weatherSource === 'pvgis') {
     if (weatherKey !== 'pvgis') throw new UserError('Importez un fichier TMY PVGIS, ou choisissez une source en ligne.');
     return [];
   }
-  const latitude = Number(field('site.latitude').value);
-  const longitude = Number(field('site.longitude').value);
-  const year = ui.weatherYear;
-  const key = `${ui.weatherSource}|${latitude.toFixed(2)}|${longitude.toFixed(2)}|${year}`;
+  return ensureRemoteWeather(
+    ui.weatherSource as SourceChoice,
+    Number(field('site.latitude').value),
+    Number(field('site.longitude').value),
+    ui.weatherYear,
+    weatherStatus,
+  );
+}
+
+/**
+ * Télécharge (ou relit en cache) une année de météo et la charge dans le moteur.
+ * Renvoie les messages de repli éventuels. Partagé par les modes Conseil et expert.
+ */
+async function ensureRemoteWeather(
+  choice: SourceChoice,
+  latitude: number,
+  longitude: number,
+  year: number,
+  statusEl: HTMLElement,
+): Promise<string[]> {
+  const key = `${choice}|${latitude.toFixed(2)}|${longitude.toFixed(2)}|${year}`;
   if (key === weatherKey) return [];
 
   setBusy(true, 'Téléchargement des données météo…');
-  setStatus(weatherStatus, 'Téléchargement des données météo…');
+  setStatus(statusEl, 'Téléchargement des données météo…');
   let response;
   try {
-    response = await fetchWeather(ui.weatherSource as SourceChoice, { latitude, longitude, year }, weatherCache);
+    response = await fetchWeather(choice, { latitude, longitude, year }, weatherCache);
   } catch (err) {
-    setStatus(weatherStatus, 'Données météo indisponibles.', 'bad');
+    setStatus(statusEl, 'Données météo indisponibles.', 'bad');
     throw new UserError(
-      `${err instanceof Error ? err.message : String(err)} Vous pouvez réessayer plus tard, choisir une autre source ou importer un fichier PVGIS.`,
+      `${err instanceof Error ? err.message : String(err)} Réessayez plus tard ; en mode expert, vous pouvez aussi importer un fichier PVGIS.`,
     );
   }
   const res = await engine.call('set_weather', response.source, response.raw);
   if (!res.ok) {
-    setStatus(weatherStatus, 'Données météo inutilisables.', 'bad');
+    setStatus(statusEl, 'Données météo inutilisables.', 'bad');
     throw new EngineErrors(res.errors);
   }
   weatherKey = key;
   const w = res.weather;
   setStatus(
-    weatherStatus,
-    `${SOURCE_LABELS[response.source]} ${year}${response.fromCache ? ' (cache local)' : ''} · point ${num(w.latitude, 2)}, ${num(w.longitude, 2)} · ` +
+    statusEl,
+    `Météo ${SOURCE_LABELS[response.source]} ${year}${response.fromCache ? ' (cache local)' : ''} · point ${num(w.latitude, 2)}, ${num(w.longitude, 2)} · ` +
       `${num(w.ghi_kwh_m2)} kWh/m²/an`,
     'ok',
   );
@@ -188,6 +211,7 @@ function currentParams() {
 }
 
 let lastSimulation: SimulationResult | null = null;
+let lastAdvice: AdviceResult | null = null;
 let lastOptimisation: OptimisationResult | null = null;
 
 function engineMessages(warnings: string[], notes: string[]): { level: MessageLevel; text: string }[] {
@@ -223,7 +247,7 @@ async function run<T>(label: string, task: () => Promise<EngineResult<T>>, onSuc
 
 function drawSimulation(r: SimulationResult) {
   renderSimulation(r);
-  monthlyChart(r);
+  monthlyChart(r.monthly);
   dailyChart(r);
   cashflowChart(r);
 }
@@ -295,7 +319,154 @@ $('btn-reset').addEventListener('click', () => {
   showFieldErrors(form, new Map());
 });
 
+// --- Onglets -----------------------------------------------------------------
+const tabs = { conseil: $('tab-conseil'), expert: $('tab-expert') };
+function showTab(name: keyof typeof tabs) {
+  for (const [key, tab] of Object.entries(tabs)) {
+    const active = key === name;
+    tab.setAttribute('aria-selected', String(active));
+    $(`view-${key}`).hidden = !active;
+  }
+  // Les graphiques d'une vue masquée n'ont pas de taille : on les redessine.
+  if (name === 'expert' && lastSimulation) drawSimulation(lastSimulation);
+  if (name === 'conseil' && lastAdvice) drawAdviceCharts(lastAdvice);
+  try {
+    localStorage.setItem('pvsim-tab', name);
+  } catch {
+    // ignoré
+  }
+}
+tabs.conseil.addEventListener('click', () => showTab('conseil'));
+tabs.expert.addEventListener('click', () => showTab('expert'));
+try {
+  if (localStorage.getItem('pvsim-tab') === 'expert') showTab('expert');
+} catch {
+  // ignoré
+}
+
+// --- Mode Conseil --------------------------------------------------------------
+const houseForm = $<HTMLFormElement>('house');
+const HOUSE_KEY = 'pvsim-house-v1';
+const houseField = (name: string) => houseForm.elements.namedItem(name) as HTMLInputElement;
+const addressInput = $<HTMLInputElement>('address');
+const addressStatus = $('address-status');
+let addressMatches: AddressMatch[] = [];
+
+try {
+  houseField('house.timezone').value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris';
+} catch {
+  // valeur par défaut du HTML
+}
+restoreForm(houseForm, HOUSE_KEY);
+houseForm.addEventListener('change', () => saveForm(houseForm, HOUSE_KEY));
+if (houseField('house.latitude').value) {
+  setStatus(addressStatus, `Position : ${num(Number(houseField('house.latitude').value), 4)}, ${num(Number(houseField('house.longitude').value), 4)}`, 'ok');
+}
+
+function setLocation(match: AddressMatch) {
+  houseField('house.latitude').value = match.latitude.toFixed(5);
+  houseField('house.longitude').value = match.longitude.toFixed(5);
+  addressInput.value = match.label;
+  setStatus(addressStatus, `${match.label} · ${num(match.latitude, 4)}, ${num(match.longitude, 4)}`, 'ok');
+  saveForm(houseForm, HOUSE_KEY);
+}
+
+let suggestTimer: ReturnType<typeof setTimeout> | undefined;
+addressInput.addEventListener('input', () => {
+  houseField('house.latitude').value = '';
+  houseField('house.longitude').value = '';
+  const exact = addressMatches.find((m) => m.label === addressInput.value);
+  if (exact) return setLocation(exact);
+  clearTimeout(suggestTimer);
+  suggestTimer = setTimeout(async () => {
+    try {
+      addressMatches = await searchAddress(addressInput.value);
+      $('address-list').innerHTML = addressMatches.map((m) => `<option value="${escapeHtml(m.label)}"></option>`).join('');
+      setStatus(addressStatus, addressMatches.length ? 'Choisissez votre adresse dans la liste.' : '');
+    } catch {
+      setStatus(addressStatus, 'Recherche d’adresse indisponible pour le moment.', 'bad');
+    }
+  }, 300);
+});
+
+/** Localise l'adresse saisie si l'utilisateur n'a pas choisi de suggestion. */
+async function ensureLocation(): Promise<void> {
+  if (houseField('house.latitude').value && houseField('house.longitude').value) return;
+  if (addressInput.value.trim().length < 3) throw new EngineErrors([{ field: 'house.latitude', message: 'Indiquez l’adresse de la maison.' }]);
+  let matches: AddressMatch[];
+  try {
+    matches = await searchAddress(addressInput.value);
+  } catch (err) {
+    throw new UserError(`Recherche d'adresse impossible : ${errorText(err)}`);
+  }
+  if (!matches.length) throw new EngineErrors([{ field: 'house.latitude', message: 'Adresse introuvable : vérifiez-la ou choisissez une suggestion.' }]);
+  setLocation(matches[0]);
+}
+
+houseForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  showFieldErrors(houseForm, new Map());
+  showMessages([], 'advice-messages');
+  setBusy(true, 'Préparation des conseils…');
+  try {
+    await ensureLocation();
+    const lat = Number(houseField('house.latitude').value);
+    const lon = Number(houseField('house.longitude').value);
+    const notes = await ensureRemoteWeather('auto', lat, lon, lastCompleteYear(), addressStatus);
+    setBusy(true, 'Comparaison des configurations…');
+    const res = await engine.call('advise', JSON.stringify(collectHouse(formEntries(houseForm))));
+    if (!res.ok) throw new EngineErrors(res.errors);
+    lastAdvice = res.advice;
+    showMessages([...notes, ...res.advice.notes].map((text) => ({ level: 'info' as const, text })), 'advice-messages');
+    renderAdvice(res.advice);
+    $('advice-results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    if (err instanceof EngineErrors) {
+      const { byField, general } = groupErrors(err.errors);
+      showFieldErrors(houseForm, byField);
+      const items = general.map((text) => ({ level: 'error' as const, text }));
+      if (byField.size) items.unshift({ level: 'error', text: 'Certaines informations sont manquantes ou invalides : voir les champs signalés.' });
+      showMessages(items, 'advice-messages');
+    } else {
+      showMessages([{ level: 'error', text: errorText(err) }], 'advice-messages');
+    }
+  } finally {
+    setBusy(false);
+  }
+});
+
+/** Reporte la recommandation dans le mode expert pour l'affiner. */
+$('btn-to-expert').addEventListener('click', () => {
+  if (!lastAdvice) return;
+  const r = lastAdvice.recommendation;
+  const set = (name: string, value: string | number) => (field(name).value = String(value));
+  set('site.latitude', houseField('house.latitude').value);
+  set('site.longitude', houseField('house.longitude').value);
+  set('site.timezone', houseField('house.timezone').value);
+  set('pv.peak_power_kwc', r.pv_kwc);
+  set('pv.tilt_deg', r.tilt_deg);
+  set('pv.azimuth_deg', r.azimuths_deg[0]);
+  set('pv.gamma_pdc_pct_per_c', -0.29);
+  field('ui.battery_enabled').checked = r.battery_kwh > 0;
+  if (r.battery_kwh > 0) {
+    set('battery.capacity_kwh', r.battery_kwh);
+    set('battery.power_kw', r.battery_kw);
+  }
+  form.querySelector<HTMLInputElement>('[name="load.mode"][value="profile"]')!.checked = true;
+  set('load.annual_kwh', Math.round(lastAdvice.consumption.annual_kwh));
+  field('ui.weather_source').value = 'auto';
+  updateVisibility();
+  saveForm(form);
+  showTab('expert');
+  showMessages(
+    r.azimuths_deg.length > 1
+      ? [{ level: 'warning', text: 'Le mode expert ne gère qu’une orientation : le pan est a été retenu. Le résultat diffère donc du conseil est + ouest.' }]
+      : [{ level: 'info', text: 'Recommandation reportée : ajustez les paramètres puis lancez « Simuler ».' }],
+  );
+});
+
 onThemeChange(() => {
+  if (lastAdvice) drawAdviceCharts(lastAdvice);
   if (lastSimulation) drawSimulation(lastSimulation);
   if (lastOptimisation) optimisationChart(lastOptimisation.optimisation.rows, lastOptimisation.optimisation.objective);
 });

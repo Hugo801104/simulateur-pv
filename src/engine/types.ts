@@ -110,6 +110,57 @@ export interface EngineInfo {
   scipy: string;
 }
 
+export interface AdviceRow {
+  key?: string;
+  label?: string;
+  panels: number;
+  pv_kwc: number;
+  battery_kwh: number;
+  battery_kw: number;
+  totals: Totals;
+  capex_eur: number;
+  npv_eur: number;
+  irr: number | null;
+  payback_years: number | null;
+  lcoe_eur_per_kwh: number | null;
+  year1_savings_eur: number;
+  year1_bill_without_pv_eur: number;
+  year1_bill_with_pv_eur: number;
+}
+
+export interface AdviceItem {
+  category: string;
+  title: string;
+  text: string;
+  level: 'conseil' | 'attention' | 'info';
+  sources: string[];
+}
+
+export interface AdviceResult {
+  recommendation: AdviceRow & {
+    module: { label: string; technology: string; power_wc: number; width_m: number; length_m: number; efficiency_pct: number; area_m2: number };
+    tilt_deg: number;
+    azimuths_deg: number[];
+    occupied_area_m2: number;
+    cumulative_eur: number[];
+    plateau: { min_kwc: number; max_kwc: number };
+    break_even_capex_eur: number | null;
+    profitable: boolean;
+  };
+  roof: { max_panels: number; max_kwc: number; fit_panels: number; occupation: number; flat: boolean };
+  production: { specific_yield_kwh_per_kwc: number; ideal_yield_kwh_per_kwc: number; orientation_ratio: number };
+  consumption: { annual_kwh: number; estimated: boolean; basis: string };
+  options: AdviceRow[];
+  grid: { panels: number; pv_kwc: number; battery_kwh: number; npv_eur: number; capex_eur: number }[];
+  monthly: SimulationResult['monthly'];
+  advice: AdviceItem[];
+  steps: { title: string; text: string; sources: string[] }[];
+  notes: string[];
+  assumptions: string[];
+  sources: Record<string, { title: string; url: string }>;
+  verified_on: string;
+}
+
 /** Méthodes exposées par le worker. */
 export interface EngineApi {
   info(): EngineResult<EngineInfo>;
@@ -119,6 +170,7 @@ export interface EngineApi {
   simulate(paramsJson: string): EngineResult<SimulationResult>;
   optimise(paramsJson: string): EngineResult<OptimisationResult>;
   hourly_csv(): EngineResult<{ csv: string }>;
+  advise(houseJson: string): EngineResult<{ advice: AdviceResult; weather: WeatherSummary }>;
 }
 
 export type EngineMethod = keyof EngineApi;

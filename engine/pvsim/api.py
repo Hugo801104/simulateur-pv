@@ -19,7 +19,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from . import __version__, economics, load, optimisation, physics, weather
+from . import __version__, advisor, economics, load, optimisation, physics, weather
 from .params import Params, ValidationError, defaults, parse_params
 from .simulation import simulate
 
@@ -200,6 +200,24 @@ class Engine:
             p, profile, load_kwh, warnings, notes = self._prepare(params_json)
             result = optimisation.run(profile.ac_kwh_per_kwc.to_numpy(), load_kwh, p.battery, p.economics, p.optimisation)
             return {"warnings": result.pop("notes") + warnings, "notes": notes, "optimisation": result}
+
+        return _respond(run)
+
+    def advise(self, house_json: str) -> str:
+        """Mode Conseil : recommandations à partir des informations sur la maison."""
+        def run() -> dict:
+            try:
+                raw = json.loads(house_json)
+            except ValueError as exc:
+                raise ValidationError([{"field": "", "message": "données JSON invalides"}]) from exc
+            house = advisor.parse_house(raw)
+            if self.weather is None:
+                raise ValueError("Aucune donnée météo chargée.")
+            result = advisor.advise(house, self.weather)
+            dist = _distance_km(house.latitude, house.longitude, self.weather.latitude, self.weather.longitude)
+            if dist > DISTANCE_WARNING_KM:
+                result["notes"].append(f"Les données météo correspondent à un point situé à {dist:.0f} km de la maison.")
+            return {"advice": result, "weather": self.weather.summary()}
 
         return _respond(run)
 

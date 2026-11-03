@@ -35,6 +35,21 @@ export function collectParams(entries: Iterable<[string, string]>, ui: Pick<UiFi
   return params;
 }
 
+/**
+ * Données « maison » du mode Conseil : champs nommés « house.champ »
+ * (identiques à engine/pvsim/advisor.py, classe House). Les valeurs vides sont omises.
+ */
+export function collectHouse(entries: Iterable<[string, string]>): Record<string, string> {
+  const house: Record<string, string> = {};
+  for (const [name, rawValue] of entries) {
+    const [group, field, ...rest] = name.split('.');
+    if (group !== 'house' || !field || rest.length) continue;
+    const value = rawValue.trim();
+    if (value !== '') house[field] = value;
+  }
+  return house;
+}
+
 /** Regroupe les erreurs par champ ; les erreurs sans champ sont des erreurs générales. */
 export function groupErrors(errors: FieldError[]): { byField: Map<string, string>; general: string[] } {
   const byField = new Map<string, string>();
@@ -91,7 +106,7 @@ export function showFieldErrors(form: HTMLFormElement, byField: Map<string, stri
   first?.focus();
 }
 
-export function saveForm(form: HTMLFormElement): void {
+export function saveForm(form: HTMLFormElement, key = STORAGE_KEY): void {
   const state: Record<string, string | boolean> = {};
   for (const el of Array.from(form.elements)) {
     if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement) || !el.name) continue;
@@ -105,16 +120,16 @@ export function saveForm(form: HTMLFormElement): void {
     }
   }
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(key, JSON.stringify(state));
   } catch {
     // Stockage indisponible : la saisie n'est simplement pas mémorisée.
   }
 }
 
-export function restoreForm(form: HTMLFormElement): void {
+export function restoreForm(form: HTMLFormElement, key = STORAGE_KEY): void {
   let state: Record<string, string | boolean>;
   try {
-    state = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+    state = JSON.parse(localStorage.getItem(key) ?? '{}');
   } catch {
     return;
   }
@@ -128,9 +143,9 @@ export function restoreForm(form: HTMLFormElement): void {
   }
 }
 
-export function clearSavedForm(): void {
+export function clearSavedForm(key = STORAGE_KEY): void {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(key);
   } catch {
     // ignoré
   }

@@ -36,9 +36,9 @@
     "totals.export_kwh": 4464.51710785551,
     "totals.import_kwh": 1341.592610347134,
     "totals.self_consumption_rate": 0.42582242467603193,
-    "economics.npv_eur": -5955.257027943944,
-    "economics.irr": -0.0041892569369864265,
-    "economics.lcoe_eur_per_kwh": 0.1747751047059311,
+    "economics.npv_eur": -9096.647531445955,
+    "economics.irr": -0.030054756326684463,
+    "economics.lcoe_eur_per_kwh": 0.1847764202207209,
     "optimisation.best.pv_kwc": 2.0,
     "optimisation.best.battery_kwh": 0.0
   }

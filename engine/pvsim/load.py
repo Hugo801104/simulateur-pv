@@ -21,6 +21,12 @@ DAILY_SHAPE = np.array([
     0.55, 0.45, 0.40, 0.38, 0.38, 0.42, 0.65, 0.95, 1.00, 0.85, 0.75, 0.75,
     0.85, 0.80, 0.70, 0.65, 0.70, 0.90, 1.25, 1.45, 1.40, 1.20, 0.95, 0.70,
 ])
+# Variante « présence en journée » (télétravail, retraite) : consommation de
+# milieu de journée plus forte. Également illustrative.
+DAILY_SHAPE_DAYTIME = np.array([
+    0.55, 0.45, 0.40, 0.38, 0.38, 0.42, 0.60, 0.85, 0.95, 0.95, 0.95, 1.05,
+    1.15, 1.05, 0.95, 0.90, 0.90, 1.00, 1.25, 1.40, 1.30, 1.10, 0.90, 0.70,
+])
 # Coefficients relatifs, janvier -> décembre (consommation hivernale plus forte).
 MONTHLY_SHAPE = np.array([1.35, 1.25, 1.10, 0.95, 0.85, 0.75, 0.72, 0.72, 0.80, 0.95, 1.15, 1.40])
 
@@ -32,10 +38,13 @@ class LoadError(ValueError):
     """Courbe de charge inutilisable."""
 
 
-def simplified_profile(index_utc: pd.DatetimeIndex, timezone: str, annual_kwh: float) -> pd.Series:
+def simplified_profile(
+    index_utc: pd.DatetimeIndex, timezone: str, annual_kwh: float, daytime_presence: bool = False
+) -> pd.Series:
     """Profil simplifié (kWh par heure) aligné sur l'index météo."""
     local = index_utc.tz_convert(timezone)
-    weights = DAILY_SHAPE[local.hour] * MONTHLY_SHAPE[local.month - 1]
+    shape = DAILY_SHAPE_DAYTIME if daytime_presence else DAILY_SHAPE
+    weights = shape[local.hour] * MONTHLY_SHAPE[local.month - 1]
     # Consommation annuelle ramenée à la durée de la série (8760 ou 8784 h).
     total = annual_kwh * len(index_utc) / 8760.0
     return pd.Series(weights / weights.sum() * total, index=index_utc)

@@ -153,9 +153,11 @@ vérifié par les tests (production = direct + charge + injection, etc.).
 - coûts = investissement net des aides, maintenance annuelle (% de l'investissement), remplacement de l'onduleur et de la batterie ;
 - flux de fin d'année actualisés : VAN, TRI (`scipy.optimize.brentq`), temps de retour simple et actualisé, LCOE.
 
-Les coûts par défaut (2 000 € de frais fixes + 1 700 €/kWc, batterie 600 €/kWh, achat
-0,2016 €/kWh, revente 0,04 €/kWh) sont des **ordres de grandeur indicatifs** à
-remplacer par des devis et les tarifs en vigueur.
+Valeurs par défaut (vérifiées le 3 novembre 2026, détail et sources dans `pvsim/knowledge.py`) :
+électricité achetée 0,2001 €/kWh (tarif réglementé Base depuis le 1er août 2026) ; surplus vendu
+1,1 c€/kWh, +2 %/an pendant 20 ans puis non valorisé (arrêté du 1er juin 2026) ; installation
+3 000 € + 1 700 €/kWc TTC, droite ajustée sur des fourchettes de prix publiées pour 3 à 9 kWc ;
+batterie 600 €/kWh. Les coûts sont des **ordres de grandeur** à remplacer par des devis.
 
 **Optimisation** (`optimisation.py`) : recherche exhaustive sur la grille
 puissance × batterie (2 000 combinaisons au maximum), critère VAN ou TRI. Une
@@ -163,7 +165,25 @@ grille est préférée à un optimiseur numérique : le problème est petit, non
 (écrêtage, batterie), et l'utilisateur voit toutes les options. Si l'optimum
 tombe sur une borne de la grille, un avertissement invite à l'élargir.
 
-## 8. Déploiement
+## 8. Mode Conseil
+
+Objectif : n'interroger l'utilisateur que sur sa maison, et en déduire une recommandation complète.
+Le benchmark des outils existants qui a guidé la conception est dans [BENCHMARK.md](BENCHMARK.md).
+
+| Étape | Module | Détail |
+|---|---|---|
+| Adresse → coordonnées | `src/data/geocode.ts` | Géoplateforme IGN, autocomplétion |
+| Saisie et validation | `src/ui/form.ts` → `advisor.parse_house` | Toutes les erreurs par champ ; consommation obligatoire avec chauffage électrique ou PAC |
+| Géométrie | `advisor.geometry` | Pente → inclinaison, orientation (8 directions ou est + ouest), toit plat : supports à 10° sud ; nombre maximal de modules = surface × taux d'occupation ÷ surface d'un module |
+| Production | `advisor.pv_profile_per_kwc` | Chaîne pvlib (§ 4) avec le coefficient de température du module ; deux pans : moitié de la puissance sur chacun |
+| Évaluation | `advisor.evaluate_grid` | Toutes les tailles de 3 kWc au toit complet, au module près, × batterie 0 / 5 / 10 kWh ; TVA 20 % au-delà de 9 kWc |
+| Recommandation | `advisor.advise` | Meilleure VAN (sous budget éventuel), plage quasi équivalente, investissement d'équilibre (VAN = 0) |
+| Conseils | `advisor.build_advice`, `steps` | Règles explicites, chacune liée à ses sources ; niveaux « conseil », « à vérifier », « info » |
+
+Toutes les données réglementaires et de marché sont dans `pvsim/knowledge.py`,
+avec source et date de vérification ; l'interface affiche cette date.
+
+## 9. Déploiement
 
 - **Vite** construit un site statique avec `base: './'` : tous les chemins sont relatifs, donc compatibles avec n'importe quel sous-chemin.
 - Les sources Python sont intégrées au bundle du worker au moment du build (`import.meta.glob`).
@@ -183,7 +203,7 @@ de fichiers de données que ce moteur n'utilise pas (bases de modules,
 turbidité de Linke). Une roue allégée réduirait le premier chargement d'environ
 un tiers. Elle n'est pas fournie, pour garder la distribution officielle de pvlib intacte.
 
-## 9. Pistes d'évolution
+## 10. Pistes d'évolution
 
 - Import d'un fichier d'horizon PVGIS pour l'ombrage lointain.
 - Tarifs heures pleines / heures creuses et pilotage de la batterie en conséquence.

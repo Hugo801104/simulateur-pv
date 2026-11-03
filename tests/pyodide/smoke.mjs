@@ -53,6 +53,13 @@ t = performance.now();
 const opt = check('optimisation', JSON.parse(engine.optimise(JSON.stringify(ref.params))));
 console.log(`[${elapsed()}] Optimisation (${opt.optimisation.rows.length} combinaisons) : ${(performance.now() - t).toFixed(0)} ms`);
 
+t = performance.now();
+const house = { latitude: 45.76, longitude: 4.84, annual_kwh: 4500, roof_area_m2: 30 };
+const advice = check('conseil', JSON.parse(engine.advise(JSON.stringify(house))));
+const rec = advice.advice.recommendation;
+console.log(`[${elapsed()}] Conseil (${advice.advice.grid.length} configurations) : ${(performance.now() - t).toFixed(0)} ms — ` +
+  `${rec.panels} panneaux, ${rec.pv_kwc} kWc, batterie ${rec.battery_kwh} kWh`);
+
 const get = (obj, path) => path.split('.').reduce((o, k) => o[k], obj);
 let failures = 0;
 for (const [key, expected] of Object.entries(ref.expected)) {

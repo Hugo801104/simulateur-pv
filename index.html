@@ -22,7 +22,211 @@
       </div>
     </header>
 
-    <main class="layout">
+    <nav class="tabs" role="tablist" aria-label="Mode">
+      <button type="button" role="tab" id="tab-conseil" aria-controls="view-conseil" aria-selected="true">Conseil</button>
+      <button type="button" role="tab" id="tab-expert" aria-controls="view-expert" aria-selected="false">Mode expert</button>
+    </nav>
+
+    <main id="view-conseil" class="layout" role="tabpanel" aria-labelledby="tab-conseil">
+      <form id="house" class="panel form" novalidate>
+        <p class="intro">Décrivez votre maison : nous calculons la production avec la météo réelle de votre adresse et vous conseillons sur les panneaux, la taille, la batterie et la pose.</p>
+
+        <fieldset>
+          <legend>Adresse</legend>
+          <label>Adresse de la maison
+            <input id="address" name="ui.address" type="text" list="address-list" autocomplete="off" placeholder="ex. 10 place Bellecour, Lyon" />
+            <datalist id="address-list"></datalist>
+          </label>
+          <div id="address-status" class="status-line" aria-live="polite"></div>
+          <input type="hidden" name="house.latitude" />
+          <input type="hidden" name="house.longitude" />
+          <input type="hidden" name="house.timezone" value="Europe/Paris" />
+          <small class="err" data-error-for="house.latitude"></small>
+        </fieldset>
+
+        <fieldset>
+          <legend>Toit</legend>
+          <div class="grid2">
+            <label>Couverture
+              <select name="house.roof_type">
+                <option value="tuiles_mecaniques">Tuiles mécaniques</option>
+                <option value="tuiles_canal">Tuiles canal / romanes</option>
+                <option value="ardoise">Ardoise</option>
+                <option value="bac_acier">Bac acier</option>
+                <option value="fibrociment">Fibrociment</option>
+                <option value="toit_plat">Toit plat</option>
+                <option value="autre">Autre</option>
+              </select>
+            </label>
+            <label>Surface du pan disponible (m²)<input name="house.roof_area_m2" type="number" step="any" min="2" value="30" /><small class="hint">sans cheminées ni fenêtres de toit</small><small class="err" data-error-for="house.roof_area_m2"></small></label>
+          </div>
+
+          <div class="field-title" id="orientation-label">Orientation du pan</div>
+          <div class="compass" role="radiogroup" aria-labelledby="orientation-label">
+            <label><input type="radio" name="house.orientation" value="NO" />NO</label>
+            <label><input type="radio" name="house.orientation" value="N" />N</label>
+            <label><input type="radio" name="house.orientation" value="NE" />NE</label>
+            <label><input type="radio" name="house.orientation" value="O" />O</label>
+            <span class="compass-center" aria-hidden="true">☼</span>
+            <label><input type="radio" name="house.orientation" value="E" />E</label>
+            <label><input type="radio" name="house.orientation" value="SO" />SO</label>
+            <label><input type="radio" name="house.orientation" value="S" checked />S</label>
+            <label><input type="radio" name="house.orientation" value="SE" />SE</label>
+          </div>
+          <label class="check"><input type="radio" name="house.orientation" value="EO" /> Deux pans, est et ouest (surface totale)</label>
+
+          <div class="field-title" id="slope-label">Pente</div>
+          <div class="segmented" role="radiogroup" aria-labelledby="slope-label">
+            <label><input type="radio" name="house.slope" value="plat" /> Plat</label>
+            <label><input type="radio" name="house.slope" value="faible" /> Faible (~15°)</label>
+            <label><input type="radio" name="house.slope" value="moyenne" checked /> Moyenne (~30°)</label>
+            <label><input type="radio" name="house.slope" value="forte" /> Forte (~45°)</label>
+          </div>
+
+          <div class="field-title" id="shading-label">Ombre sur le toit</div>
+          <div class="segmented" role="radiogroup" aria-labelledby="shading-label">
+            <label><input type="radio" name="house.shading" value="aucun" checked /> Aucune</label>
+            <label><input type="radio" name="house.shading" value="partiel" /> Partielle (arbre, cheminée…)</label>
+            <label><input type="radio" name="house.shading" value="important" /> Importante</label>
+          </div>
+
+          <details>
+            <summary>Construction et urbanisme</summary>
+            <div class="grid2">
+              <label>Âge de la couverture
+                <select name="house.roof_age">
+                  <option value="inconnu">Je ne sais pas</option>
+                  <option value="recente">Moins de 10 ans</option>
+                  <option value="moyenne">10 à 25 ans</option>
+                  <option value="ancienne">Plus de 25 ans / à refaire</option>
+                </select>
+              </label>
+              <label>Charpente
+                <select name="house.structure">
+                  <option value="inconnu">Je ne sais pas</option>
+                  <option value="traditionnelle">Bois traditionnelle</option>
+                  <option value="fermettes">Fermettes industrielles</option>
+                  <option value="beton_metal">Béton ou métal</option>
+                </select>
+              </label>
+              <label>Construction de la maison
+                <select name="house.construction_period">
+                  <option value="inconnu">Je ne sais pas</option>
+                  <option value="avant_1997">Avant 1997</option>
+                  <option value="apres_1997">1997 ou après</option>
+                </select>
+              </label>
+              <label>Secteur protégé (monument historique…)
+                <select name="house.protected_area">
+                  <option value="inconnu">Je ne sais pas</option>
+                  <option value="non">Non</option>
+                  <option value="oui">Oui</option>
+                </select>
+              </label>
+              <label>Inclinaison exacte (°)<input name="house.tilt_deg" type="number" step="any" min="0" max="90" placeholder="facultatif" /><small class="err" data-error-for="house.tilt_deg"></small></label>
+            </div>
+          </details>
+        </fieldset>
+
+        <fieldset>
+          <legend>Foyer</legend>
+          <div class="grid2">
+            <label>Consommation annuelle (kWh)<input name="house.annual_kwh" type="number" step="any" placeholder="sur votre facture" /><small class="hint">recommandé ; sinon estimée</small><small class="err" data-error-for="house.annual_kwh"></small></label>
+            <label>Nombre de personnes<input name="house.occupants" type="number" step="1" min="1" value="3" /><small class="err" data-error-for="house.occupants"></small></label>
+            <label>Chauffage
+              <select name="house.heating">
+                <option value="autre">Gaz, fioul, bois…</option>
+                <option value="electrique">Électrique</option>
+                <option value="pac">Pompe à chaleur</option>
+              </select>
+            </label>
+            <label>Quelqu'un à la maison en journée ?
+              <select name="house.daytime_presence">
+                <option value="non">Rarement</option>
+                <option value="oui">Souvent (télétravail, retraite)</option>
+              </select>
+            </label>
+            <label>Chauffe-eau électrique
+              <select name="house.electric_water_heater">
+                <option value="non">Non</option>
+                <option value="oui">Oui</option>
+              </select>
+            </label>
+            <label>Véhicule électrique
+              <select name="house.electric_vehicle">
+                <option value="non">Non</option>
+                <option value="oui">Oui</option>
+              </select>
+            </label>
+            <label>Budget maximal (€)<input name="house.budget_eur" type="number" step="any" placeholder="facultatif" /><small class="err" data-error-for="house.budget_eur"></small></label>
+          </div>
+        </fieldset>
+
+        <div class="actions">
+          <button type="submit" id="btn-advise" class="btn-primary" disabled>Obtenir mes conseils</button>
+        </div>
+      </form>
+
+      <section class="results" aria-live="polite">
+        <div id="advice-messages"></div>
+
+        <div id="advice-empty" class="panel empty">
+          <h2>Ce que vous obtenez</h2>
+          <ul>
+            <li>Le nombre de panneaux et la puissance adaptés à votre toit et à votre consommation.</li>
+            <li>Le type de panneaux, d'onduleur et l'intérêt d'une batterie.</li>
+            <li>La rentabilité avec les tarifs en vigueur, et le prix de devis à viser.</li>
+            <li>Les points de construction à vérifier et les démarches.</li>
+          </ul>
+          <p class="hint">Calcul fait dans votre navigateur. Seules l'adresse (pour la localiser) et ses coordonnées (pour la météo) sont envoyées à des services publics.</p>
+        </div>
+
+        <div id="advice-results" hidden>
+          <div class="panel reco">
+            <p class="eyebrow">Notre recommandation</p>
+            <h2 id="reco-title"></h2>
+            <p id="reco-subtitle" class="reco-sub"></p>
+            <div id="reco-kpis" class="kpis"></div>
+            <p id="reco-plateau" class="hint"></p>
+          </div>
+
+          <div class="panel">
+            <h2>Nos conseils</h2>
+            <div id="advice-list" class="advice-list"></div>
+          </div>
+
+          <div class="panel">
+            <h2>Comparer les options</h2>
+            <div class="table-wrap">
+              <table id="options-table">
+                <thead><tr><th class="left">Option</th><th>Panneaux</th><th>kWc</th><th>Batterie</th><th>Invest.</th><th>Gain an 1</th><th>Retour</th><th>VAN</th><th>Autocons.</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <h3>Valeur du projet selon la taille</h3>
+            <div class="chart"><canvas id="chart-advice-grid" aria-label="Valeur actuelle nette selon la puissance"></canvas></div>
+            <h3>Production et consommation mois par mois (option recommandée)</h3>
+            <div class="chart"><canvas id="chart-advice-monthly" aria-label="Bilan mensuel de l'option recommandée"></canvas></div>
+          </div>
+
+          <div class="panel">
+            <h2>Les étapes de votre projet</h2>
+            <ol id="steps-list" class="steps"></ol>
+          </div>
+
+          <div class="panel">
+            <h2>Hypothèses et sources</h2>
+            <ul id="assumptions-list" class="small-list"></ul>
+            <h3>Sources</h3>
+            <ul id="sources-list" class="small-list"></ul>
+            <p id="advice-verified" class="hint"></p>
+            <button type="button" id="btn-to-expert" class="btn-secondary">Affiner en mode expert</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <main id="view-expert" class="layout" role="tabpanel" aria-labelledby="tab-expert" hidden>
       <form id="params" class="panel form" novalidate>
         <fieldset>
           <legend>Site</legend>
@@ -119,20 +323,21 @@
           <legend>Économie</legend>
           <div class="grid2">
             <label>Coût PV (€/kWc)<input name="economics.pv_capex_eur_per_kwc" type="number" step="any" value="1700" /><small class="err" data-error-for="economics.pv_capex_eur_per_kwc"></small></label>
-            <label>Coûts fixes (€)<input name="economics.fixed_capex_eur" type="number" step="any" value="2000" /><small class="hint">pose, raccordement, démarches</small><small class="err" data-error-for="economics.fixed_capex_eur"></small></label>
+            <label>Coûts fixes (€)<input name="economics.fixed_capex_eur" type="number" step="any" value="3000" /><small class="hint">pose, raccordement, démarches</small><small class="err" data-error-for="economics.fixed_capex_eur"></small></label>
             <label>Coût batterie (€/kWh)<input name="economics.battery_capex_eur_per_kwh" type="number" step="any" value="600" /><small class="err" data-error-for="economics.battery_capex_eur_per_kwh"></small></label>
-            <label>Prix d'achat électricité (€/kWh)<input name="economics.electricity_price_eur_per_kwh" type="number" step="any" value="0.2016" /><small class="err" data-error-for="economics.electricity_price_eur_per_kwh"></small></label>
-            <label>Tarif de revente (€/kWh)<input name="economics.export_tariff_eur_per_kwh" type="number" step="any" value="0.04" /><small class="err" data-error-for="economics.export_tariff_eur_per_kwh"></small></label>
+            <label>Prix d'achat électricité (€/kWh)<input name="economics.electricity_price_eur_per_kwh" type="number" step="any" value="0.2001" /><small class="err" data-error-for="economics.electricity_price_eur_per_kwh"></small></label>
+            <label>Tarif de revente (€/kWh)<input name="economics.export_tariff_eur_per_kwh" type="number" step="any" value="0.011" /><small class="err" data-error-for="economics.export_tariff_eur_per_kwh"></small></label>
             <label>Aides (€)<input name="economics.subsidy_eur" type="number" step="any" value="0" /><small class="err" data-error-for="economics.subsidy_eur"></small></label>
             <label>Durée d'étude (ans)<input name="economics.lifetime_years" type="number" step="1" value="25" /><small class="err" data-error-for="economics.lifetime_years"></small></label>
           </div>
-          <p class="hint">Coûts par défaut : ordres de grandeur indicatifs, à remplacer par vos devis.</p>
+          <p class="hint">Valeurs par défaut vérifiées le 3 novembre 2026 : rachat du surplus 1,1 c€/kWh (+2 %/an, 20 ans), tarif réglementé Base 0,2001 €/kWh. Coûts : ordres de grandeur, à remplacer par vos devis.</p>
           <details>
             <summary>Hypothèses financières</summary>
             <div class="grid2">
               <label>Maintenance (% invest./an)<input name="economics.opex_pct_of_capex" type="number" step="any" value="1" /><small class="err" data-error-for="economics.opex_pct_of_capex"></small></label>
               <label>Évolution prix achat (%/an)<input name="economics.electricity_price_escalation_pct" type="number" step="any" value="2" /><small class="err" data-error-for="economics.electricity_price_escalation_pct"></small></label>
-              <label>Évolution tarif revente (%/an)<input name="economics.export_tariff_escalation_pct" type="number" step="any" value="0" /><small class="err" data-error-for="economics.export_tariff_escalation_pct"></small></label>
+              <label>Évolution tarif revente (%/an)<input name="economics.export_tariff_escalation_pct" type="number" step="any" value="2" /><small class="err" data-error-for="economics.export_tariff_escalation_pct"></small></label>
+              <label>Durée du contrat de rachat (ans)<input name="economics.export_tariff_years" type="number" step="1" value="20" /><small class="err" data-error-for="economics.export_tariff_years"></small></label>
               <label>Taux d'actualisation (%)<input name="economics.discount_rate_pct" type="number" step="any" value="4" /><small class="err" data-error-for="economics.discount_rate_pct"></small></label>
               <label>Dégradation modules (%/an)<input name="economics.degradation_pct_per_year" type="number" step="any" value="0.5" /><small class="err" data-error-for="economics.degradation_pct_per_year"></small></label>
               <label>Remplacement onduleur (année)<input name="economics.inverter_replacement_year" type="number" step="1" value="15" /><small class="hint">0 = jamais</small><small class="err" data-error-for="economics.inverter_replacement_year"></small></label>

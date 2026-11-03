@@ -13,6 +13,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
+from . import knowledge
+
 
 class ValidationError(Exception):
     """Erreurs de saisie : liste de {"field": "groupe.champ", "message": str}."""
@@ -72,20 +74,22 @@ class Load:
 
 @dataclass(frozen=True)
 class Economics:
-    # Ordres de grandeur indicatifs (résidentiel), à remplacer par des devis.
-    pv_capex_eur_per_kwc: float = _num(1700.0, 0, 20000, "Coût PV (€/kWc)")
-    battery_capex_eur_per_kwh: float = _num(600.0, 0, 10000, "Coût batterie (€/kWh)")
-    fixed_capex_eur: float = _num(2000.0, 0, 1e8, "Coûts fixes (€)")
+    # Valeurs par défaut : voir knowledge.py (sources et date de vérification).
+    pv_capex_eur_per_kwc: float = _num(knowledge.INSTALL_EUR_PER_KWC, 0, 20000, "Coût PV (€/kWc)")
+    battery_capex_eur_per_kwh: float = _num(knowledge.BATTERY_EUR_PER_KWH, 0, 10000, "Coût batterie (€/kWh)")
+    fixed_capex_eur: float = _num(knowledge.INSTALL_FIXED_EUR, 0, 1e8, "Coûts fixes (€)")
     subsidy_eur: float = _num(0.0, 0, 1e8, "Aides (€)")
     opex_pct_of_capex: float = _num(1.0, 0, 20, "Maintenance (% de l'investissement / an)")
     inverter_replacement_year: int = _num(15, 0, 60, "Remplacement onduleur (année, 0 = jamais)", integer=True)
     inverter_replacement_eur_per_kwc: float = _num(150.0, 0, 5000, "Coût remplacement onduleur (€/kWc)")
     battery_lifetime_years: int = _num(12, 0, 60, "Durée de vie batterie (ans, 0 = pas de remplacement)", integer=True)
     battery_replacement_pct: float = _num(70.0, 0, 200, "Coût remplacement batterie (% du coût initial)")
-    electricity_price_eur_per_kwh: float = _num(0.2016, 0, 5, "Prix de l'électricité achetée (€/kWh)")
+    electricity_price_eur_per_kwh: float = _num(knowledge.ELECTRICITY_PRICE_EUR_PER_KWH, 0, 5, "Prix de l'électricité achetée (€/kWh)")
     electricity_price_escalation_pct: float = _num(2.0, -10, 20, "Évolution du prix (%/an)")
-    export_tariff_eur_per_kwh: float = _num(0.04, 0, 5, "Tarif de revente (€/kWh)")
-    export_tariff_escalation_pct: float = _num(0.0, -10, 20, "Évolution du tarif de revente (%/an)")
+    export_tariff_eur_per_kwh: float = _num(knowledge.EXPORT_TARIFF_EUR_PER_KWH, 0, 5, "Tarif de revente (€/kWh)")
+    export_tariff_escalation_pct: float = _num(knowledge.EXPORT_TARIFF_INDEXATION_PCT, -10, 20, "Évolution du tarif de revente (%/an)")
+    # Au-delà du contrat d'achat, le surplus n'est plus valorisé (hypothèse prudente).
+    export_tariff_years: int = _num(knowledge.EXPORT_CONTRACT_YEARS, 0, 60, "Durée du contrat de rachat (ans)", integer=True)
     discount_rate_pct: float = _num(4.0, -5, 30, "Taux d'actualisation (%)")
     lifetime_years: int = _num(25, 1, 60, "Durée d'étude (ans)", integer=True)
     degradation_pct_per_year: float = _num(0.5, 0, 5, "Dégradation des modules (%/an)")

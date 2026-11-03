@@ -8,6 +8,15 @@ Le site est **100 % statique** : il se déploie gratuitement sur GitLab Pages,
 sans serveur à administrer. Le moteur de calcul est écrit en Python et
 s'exécute dans le navigateur grâce à **Pyodide** (Python compilé en WebAssembly).
 
+Deux modes :
+
+- **Conseil** (par défaut) : l'utilisateur décrit seulement sa maison (adresse, toit, foyer). L'application recommande
+  le nombre et le type de panneaux, la puissance, l'onduleur, l'intérêt d'une batterie, le prix de devis à viser,
+  les points de construction à vérifier et les démarches. Chaque conseil cite sa source ; voir [docs/BENCHMARK.md](docs/BENCHMARK.md).
+- **Expert** : tous les paramètres techniques et économiques sont réglables.
+
+Fonctionnalités :
+
 - Météo horaire téléchargée depuis **Open-Meteo** (ERA5) ou **NASA POWER**, ou importée depuis un fichier **PVGIS**.
 - Chaîne physique pvlib : position du soleil, transposition Perez, pertes optiques, température Faiman, PVWatts, onduleur.
 - Batterie (autoconsommation maximale), courbe de charge importée (export Enedis) ou profil simplifié.
@@ -67,6 +76,15 @@ npm run preview:pages
 
 Le site est alors servi sur http://localhost:8090/simulateur-pv/.
 
+## Déploiement sur GitHub Pages
+
+Le site est publié sur **https://hugo801104.github.io/simulateur-pv/**.
+
+Le workflow [.github/workflows/pages.yml](.github/workflows/pages.yml) s'exécute à chaque push sur `main` :
+tests du moteur et de l'interface, téléchargement de Pyodide, test du moteur dans Pyodide, construction,
+puis publication. Pour un autre dépôt : **Settings > Pages > Source = GitHub Actions**, aucun secret nécessaire.
+Les pull requests lancent les tests et la construction, sans publier.
+
 ## Déploiement sur GitLab Pages
 
 1. Créez un projet GitLab et poussez ce dépôt sur sa branche par défaut (`main`).
@@ -85,6 +103,12 @@ Les chemins du site sont relatifs : il fonctionne aussi bien sous un sous-chemin
 qu'à la racine d'un domaine (option « domaine unique » de GitLab Pages, domaine personnalisé).
 
 ## Mise à jour
+
+**Tarifs, prix et règles du mode Conseil** : tout est regroupé dans
+[engine/pvsim/knowledge.py](engine/pvsim/knowledge.py) (tarif de rachat, prix de l'électricité, TVA,
+prix d'installation, classes de modules, sources). Mettez à jour les valeurs et `VERIFIED_ON`,
+puis lancez les tests et régénérez le cas de référence si besoin. Les valeurs par défaut du mode expert
+en dépendent aussi (gardez `index.html` aligné : un test le vérifie).
 
 **Application** : poussez sur `main`. Le service worker revalide la page à
 chaque visite, donc la nouvelle version s'affiche dès le rechargement suivant.
@@ -113,6 +137,8 @@ engine/                 Moteur de calcul Python (indépendant de l'interface)
   pvsim/simulation.py     bilan horaire et batterie
   pvsim/economics.py      calcul économique
   pvsim/optimisation.py   dimensionnement optimal
+  pvsim/advisor.py        mode Conseil (recommandations)
+  pvsim/knowledge.py      tarifs, prix, règles et sources du mode Conseil
   pvsim/api.py            point d'entrée JSON utilisé par l'interface
   tests/                  tests pytest et données réelles de référence (Lyon)
 src/
@@ -128,6 +154,7 @@ tests/pyodide/          test du moteur dans Pyodide
 
 ## Données et conditions d'utilisation
 
+- **Adresses** : Géoplateforme de l'IGN (géocodage gratuit, sans clé).
 - **Open-Meteo** : licence CC BY 4.0, API gratuite **pour un usage non commercial**
   (environ 10 000 appels par jour). Pour un usage commercial, un abonnement Open-Meteo est requis.
 - **NASA POWER** : données publiques de la NASA.

@@ -6,8 +6,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 
 export type MessageLevel = 'error' | 'warning' | 'info';
 
-export function showMessages(items: { level: MessageLevel; text: string }[]) {
-  const box = $('messages');
+export function showMessages(items: { level: MessageLevel; text: string }[], target = 'messages') {
+  const box = $(target);
   box.innerHTML = items
     .map(({ level, text }) => `<div class="msg msg-${level}" role="${level === 'error' ? 'alert' : 'status'}">${escapeHtml(text)}</div>`)
     .join('');

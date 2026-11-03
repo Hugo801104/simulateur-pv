@@ -11,7 +11,7 @@ def flat(**kw) -> Economics:
     base = dict(
         pv_capex_eur_per_kwc=1000, battery_capex_eur_per_kwh=0, fixed_capex_eur=0, opex_pct_of_capex=0, inverter_replacement_year=0,
         battery_lifetime_years=0, electricity_price_eur_per_kwh=0.2, electricity_price_escalation_pct=0,
-        export_tariff_eur_per_kwh=0.1, discount_rate_pct=0, lifetime_years=10, degradation_pct_per_year=0,
+        export_tariff_eur_per_kwh=0.1, export_tariff_escalation_pct=0, discount_rate_pct=0, lifetime_years=10, degradation_pct_per_year=0,
     )
     base.update(kw)
     return Economics(**base)
@@ -61,3 +61,9 @@ def test_bills():
     r = economics.evaluate(flat(), 1.0, 0.0, TOTALS)
     assert r["year1_bill_without_pv_eur"] == pytest.approx(400)
     assert r["year1_bill_with_pv_eur"] == pytest.approx(1400 * 0.2 - 40)
+
+
+def test_export_not_paid_after_contract():
+    r = economics.evaluate(flat(lifetime_years=25, export_tariff_years=20), 1.0, 0.0, TOTALS)
+    sales = r["yearly"]["sales_eur"]
+    assert sales[19] == pytest.approx(40) and sales[20] == 0 and sales[24] == 0

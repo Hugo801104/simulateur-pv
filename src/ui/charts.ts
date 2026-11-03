@@ -50,10 +50,9 @@ const baseOptions = (yTitle: string) => ({
   scales: { y: { title: { display: true, text: yTitle }, beginAtZero: true } },
 });
 
-export function monthlyChart(r: SimulationResult) {
-  const m = r.monthly;
+export function monthlyChart(m: SimulationResult['monthly'], canvasId = 'chart-monthly') {
   const labels = m.month.map((i) => MONTHS[i - 1]);
-  render('chart-monthly', {
+  render(canvasId, {
     type: 'bar',
     data: {
       labels,
@@ -99,11 +98,13 @@ export function cashflowChart(r: SimulationResult) {
   } as ChartConfiguration);
 }
 
-export function optimisationChart(rows: OptimisationRow[], objective: 'npv' | 'irr') {
+type GridRow = Pick<OptimisationRow, 'pv_kwc' | 'battery_kwh' | 'npv_eur'> & { irr?: number | null };
+
+export function optimisationChart(rows: GridRow[], objective: 'npv' | 'irr', canvasId = 'chart-opt') {
   const sizes = [...new Set(rows.map((r) => r.pv_kwc))].sort((a, b) => a - b);
   const batteries = [...new Set(rows.map((r) => r.battery_kwh))].sort((a, b) => a - b);
   const palette = ['--c-self', '--c-battery', '--c-export', '--c-pv', '--c-import', '--c-load'];
-  render('chart-opt', {
+  render(canvasId, {
     type: 'line',
     data: {
       labels: sizes.map((s) => num(s, s % 1 ? 1 : 0)),

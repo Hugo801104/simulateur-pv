@@ -24,7 +24,7 @@ def test_irr_objective():
 
 def test_free_export_makes_bigger_better():
     # Si la revente paie autant que l'achat, la plus grande installation est la meilleure.
-    econ = Economics(export_tariff_eur_per_kwh=0.2016)
+    econ = Economics(export_tariff_eur_per_kwh=0.2001, export_tariff_years=60)
     opt = Optimisation(pv_min_kwc=1, pv_max_kwc=5, pv_step_kwc=1, battery_sizes_kwh=(0.0,))
     r = optimisation.run(PV_PER_KWC, LOAD, Battery(), econ, opt)
     assert r["best"]["pv_kwc"] == 5

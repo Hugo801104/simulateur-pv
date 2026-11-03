@@ -5,6 +5,7 @@ Hypothèses (documentées dans docs/ARCHITECTURE.md) :
     production diminue de la dégradation annuelle ; l'énergie autoconsommée et
     l'énergie injectée sont réduites dans la même proportion.
   * Gains annuels = électricité non achetée × prix + énergie injectée × tarif.
+    Après la durée du contrat de rachat, l'énergie injectée n'est plus valorisée.
   * Les flux sont comptés en fin d'année et actualisés au taux choisi.
   * Coûts : investissement initial (net des aides), maintenance annuelle,
     remplacement de l'onduleur et de la batterie aux années indiquées.
@@ -32,6 +33,7 @@ def evaluate(econ: Economics, pv_kwc: float, battery_kwh: float, totals: dict[st
     deg = (1.0 - econ.degradation_pct_per_year / 100.0) ** (years - 1)
     price = econ.electricity_price_eur_per_kwh * (1 + econ.electricity_price_escalation_pct / 100.0) ** (years - 1)
     tariff = econ.export_tariff_eur_per_kwh * (1 + econ.export_tariff_escalation_pct / 100.0) ** (years - 1)
+    tariff = np.where(years <= econ.export_tariff_years, tariff, 0.0)
 
     production = totals["pv_kwh"] * deg
     savings = totals["self_supplied_kwh"] * deg * price

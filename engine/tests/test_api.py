@@ -55,7 +55,7 @@ def test_full_simulation(engine):
 
 def test_optimisation_warns_when_best_is_on_grid_edge(engine):
     params = {"optimisation": {"pv_min_kwc": 1, "pv_max_kwc": 2, "pv_step_kwc": 1, "battery_sizes_kwh": [0]},
-              "economics": {"export_tariff_eur_per_kwh": 0.2016, "fixed_capex_eur": 0}}
+              "economics": {"export_tariff_eur_per_kwh": 0.2001, "export_tariff_years": 60, "fixed_capex_eur": 0}}
     r = call(engine.optimise, json.dumps(params))
     assert r["ok"] and r["optimisation"]["best"]["pv_kwc"] == 2
     assert any("puissance maximale testée" in w for w in r["warnings"])

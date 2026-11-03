@@ -194,11 +194,60 @@ tr.best td { background: var(--accent-soft); font-weight: 600; }
 .footer { padding: 1rem 1.5rem 2rem; font-size: 0.8rem; color: var(--text-muted); max-width: 1500px; margin: 0 auto; }
 .footer p { margin: 0.3rem 0; }
 
+/* --- Onglets ---------------------------------------------------------------- */
+.tabs { display: flex; gap: 0.25rem; padding: 0 1.5rem; background: var(--panel); border-bottom: 1px solid var(--border); }
+.tabs button {
+  background: none; border: 0; border-bottom: 3px solid transparent; border-radius: 0;
+  padding: 0.7rem 1rem; font-weight: 600; color: var(--text-muted);
+}
+.tabs button[aria-selected='true'] { color: var(--text); border-bottom-color: var(--accent); }
+.tabs button:hover { color: var(--text); }
+
+/* --- Mode Conseil ---------------------------------------------------------- */
+.intro { margin: 0 0 1rem; font-size: 0.9rem; color: var(--text-muted); }
+.field-title { font-size: 0.82rem; color: var(--text-muted); margin: 0.9rem 0 0.4rem; }
+.compass { display: grid; grid-template-columns: repeat(3, 3.2rem); gap: 0.3rem; margin-bottom: 0.5rem; }
+.compass label {
+  flex-direction: row; justify-content: center; align-items: center; height: 2.4rem;
+  border: 1px solid var(--border); border-radius: 7px; cursor: pointer; color: var(--text); font-weight: 600; font-size: 0.85rem;
+}
+.compass label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.compass input { position: absolute; opacity: 0; pointer-events: none; }
+.compass label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
+.compass-center { display: flex; align-items: center; justify-content: center; color: var(--c-pv); font-size: 1.3rem; }
+
+.reco { border-color: var(--accent); }
+.eyebrow { margin: 0 0 0.3rem; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-strong); }
+.reco h2 { font-size: 1.35rem; }
+.reco-sub { margin: 0.35rem 0 0; color: var(--text-muted); }
+
+.advice-list { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.8rem; }
+.advice { border: 1px solid var(--border); border-left: 4px solid var(--c-self); border-radius: 8px; padding: 0.65rem 0.85rem; }
+.advice.attention { border-left-color: var(--c-pv); }
+.advice.info { border-left-color: var(--c-export); }
+.advice h3 { margin: 0 0 0.25rem; font-size: 0.92rem; color: var(--text); display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
+.advice p { margin: 0; font-size: 0.88rem; }
+.badge { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 0.1rem 0.4rem; border-radius: 4px; background: var(--bg); color: var(--text-muted); }
+.advice.attention .badge { background: var(--msg-warning-bg); color: var(--msg-warning-fg); }
+.advice .src { font-size: 0.75rem; margin-top: 0.3rem; color: var(--text-muted); }
+.advice .src a { margin-right: 0.6rem; }
+
+.steps { padding-left: 1.3rem; margin: 0.8rem 0 0; }
+.steps li { margin-bottom: 0.7rem; }
+.steps strong { display: block; }
+.steps p { margin: 0.15rem 0 0; font-size: 0.88rem; color: var(--text-muted); }
+.small-list { padding-left: 1.1rem; margin: 0.6rem 0; font-size: 0.85rem; color: var(--text-muted); }
+.small-list li { margin-bottom: 0.3rem; }
+th.left, td.left { text-align: left; }
+.empty ul { padding-left: 1.2rem; margin: 0.8rem 0; }
+.empty li { margin-bottom: 0.4rem; }
+
 [hidden] { display: none !important; }
 
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; padding: 1rem; }
   .topbar { padding: 0.8rem 1rem; }
+  .tabs { padding: 0 1rem; }
   .form { position: static; max-height: none; overflow: visible; }
   .actions { bottom: 0; }
 }
