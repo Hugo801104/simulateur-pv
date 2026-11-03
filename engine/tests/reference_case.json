@@ -1,0 +1,45 @@
+{
+  "weather_source": "openmeteo",
+  "weather_fixture": "openmeteo_lyon_2023.json",
+  "params": {
+    "site": {
+      "latitude": 45.76,
+      "longitude": 4.84,
+      "timezone": "Europe/Paris"
+    },
+    "pv": {
+      "peak_power_kwc": 6,
+      "tilt_deg": 30,
+      "azimuth_deg": 180
+    },
+    "battery": {
+      "capacity_kwh": 5,
+      "power_kw": 2.5
+    },
+    "load": {
+      "mode": "profile",
+      "annual_kwh": 4500
+    },
+    "optimisation": {
+      "pv_min_kwc": 2,
+      "pv_max_kwc": 8,
+      "pv_step_kwc": 1,
+      "battery_sizes_kwh": [
+        0,
+        5
+      ]
+    }
+  },
+  "expected": {
+    "specific_yield_kwh_per_kwc": 1295.9164840646197,
+    "totals.pv_kwh": 7775.4989043877185,
+    "totals.export_kwh": 4464.51710785551,
+    "totals.import_kwh": 1341.592610347134,
+    "totals.self_consumption_rate": 0.42582242467603193,
+    "economics.npv_eur": -5955.257027943944,
+    "economics.irr": -0.0041892569369864265,
+    "economics.lcoe_eur_per_kwh": 0.1747751047059311,
+    "optimisation.best.pv_kwc": 2.0,
+    "optimisation.best.battery_kwh": 0.0
+  }
+}

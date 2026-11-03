@@ -1,0 +1,12 @@
+node_modules/
+dist/
+public/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.cache/
+# Pyodide et paquets Python : téléchargés par `npm run setup` (≈ 57 Mo)
+static/pyodide/
+report-*.xml
+.DS_Store

@@ -1,0 +1,89 @@
+# Intégration et déploiement continus — GitLab Pages
+#
+#   test     tests du moteur Python (CPython) et de l'interface (TypeScript)
+#   build    téléchargement de Pyodide, construction du site statique,
+#            test du moteur exécuté dans Pyodide (WebAssembly)
+#   deploy   publication sur GitLab Pages (branche par défaut uniquement)
+#
+# Aucune variable CI/CD n'est nécessaire. Le site fonctionne sous le sous-chemin
+# GitLab Pages (https://<utilisateur>.gitlab.io/<projet>/) grâce aux chemins relatifs.
+
+stages: [test, build, deploy]
+
+default:
+  interruptible: true
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+  NODE_IMAGE: node:22-bookworm-slim
+  # Même version de Python que Pyodide (voir pyodide.config.json).
+  PYTHON_IMAGE: python:3.14-slim
+
+.node:
+  image: $NODE_IMAGE
+  cache:
+    - key:
+        files: [package-lock.json]
+      paths: [.cache/npm]
+  before_script:
+    - npm ci --no-audit --no-fund
+
+test:engine:
+  stage: test
+  image: $PYTHON_IMAGE
+  cache:
+    - key:
+        files: [engine/requirements-dev.txt]
+      paths: [.cache/pip]
+  script:
+    - pip install -r engine/requirements-dev.txt
+    - cd engine
+    - python -m pytest -q --junitxml=../report-engine.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report-engine.xml
+
+test:frontend:
+  extends: .node
+  stage: test
+  script:
+    - npm run typecheck
+    - npx vitest run --reporter=default --reporter=junit --outputFile=report-frontend.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report-frontend.xml
+
+build:
+  extends: .node
+  stage: build
+  cache:
+    - key:
+        files: [package-lock.json]
+      paths: [.cache/npm]
+    # Pyodide (≈ 57 Mo) n'est retéléchargé que si sa configuration change.
+    - key:
+        files: [pyodide.config.json]
+        prefix: pyodide
+      paths: [static/pyodide]
+  script:
+    - npm run setup
+    - npm run test:pyodide
+    - npm run build
+  artifacts:
+    paths: [dist]
+    expire_in: 1 week
+
+pages:
+  stage: deploy
+  image: alpine:3.20
+  needs: [build]
+  script:
+    - rm -rf public
+    - mv dist public
+  artifacts:
+    paths: [public]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

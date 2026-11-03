@@ -1,0 +1,28 @@
+{
+  "name": "simulateur-pv",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Simulateur photovoltaïque statique (pvlib dans le navigateur via Pyodide), déployable sur GitLab Pages.",
+  "type": "module",
+  "scripts": {
+    "setup": "node scripts/fetch-pyodide.mjs",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "preview:pages": "node scripts/serve-pages.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:pyodide": "node tests/pyodide/smoke.mjs"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "dependencies": {
+    "chart.js": "4.5.0"
+  },
+  "devDependencies": {
+    "typescript": "5.8.3",
+    "vite": "6.3.5",
+    "vitest": "3.2.4"
+  }
+}

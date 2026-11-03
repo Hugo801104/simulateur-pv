@@ -1,0 +1,16 @@
+{
+  "$comment": "Version de Pyodide et paquets Python embarqués dans le site. Voir README, section « Mise à jour ».",
+  "pyodideVersion": "314.0.7",
+  "cdn": "https://cdn.jsdelivr.net/pyodide/v{version}/full/",
+  "coreFiles": ["pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"],
+  "packages": ["numpy", "scipy", "pandas", "pytz", "tzdata", "requests", "h5py"],
+  "wheels": [
+    {
+      "name": "pvlib",
+      "version": "0.16.1",
+      "file": "pvlib-0.16.1-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/14/aa/e5089a4a61fea61d9bd69c23b9fdbbacea6d175c114f2c45be7ef6391b3e/pvlib-0.16.1-py3-none-any.whl",
+      "sha256": "4e61b5228a13f782413d7cf8cc48eb6e62e7bf55d155958fa9fd72420b63603d"
+    }
+  ]
+}

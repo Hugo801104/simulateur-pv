@@ -1,0 +1,8 @@
+# Versions identiques à celles de Pyodide 314.0.7 (navigateur), pour que les
+# tests sous CPython portent sur le même code scientifique que la production.
+# À mettre à jour avec pyodide.config.json (voir README, « Mise à jour »).
+numpy==2.4.6
+scipy==1.18.0
+pandas==3.0.2
+pvlib==0.16.1
+pytest>=8,<10

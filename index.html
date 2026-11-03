@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Simulation d'une installation photovoltaïque en autoconsommation : production (pvlib), batterie, rentabilité et dimensionnement optimal." />
+    <title>Simulateur PV</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="26" height="26"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"/></g></svg>
+        <div>
+          <h1>Simulateur PV</h1>
+          <p class="subtitle">Autoconsommation, batterie et rentabilité</p>
+        </div>
+      </div>
+      <div id="engine-status" class="engine-status" role="status" aria-live="polite">
+        <span class="dot"></span><span id="engine-status-text">Démarrage du moteur de calcul…</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <form id="params" class="panel form" novalidate>
+        <fieldset>
+          <legend>Site</legend>
+          <div class="grid2">
+            <label>Latitude (°)<input name="site.latitude" type="number" step="any" value="45.76" required /><small class="err" data-error-for="site.latitude"></small></label>
+            <label>Longitude (°)<input name="site.longitude" type="number" step="any" value="4.84" required /><small class="err" data-error-for="site.longitude"></small></label>
+            <label>Altitude (m)<input name="site.altitude" type="number" step="any" placeholder="auto" /><small class="err" data-error-for="site.altitude"></small></label>
+            <label>Fuseau horaire<input name="site.timezone" type="text" value="Europe/Paris" autocomplete="off" /><small class="err" data-error-for="site.timezone"></small></label>
+          </div>
+          <button type="button" id="geolocate" class="btn-link">Utiliser ma position</button>
+        </fieldset>
+
+        <fieldset>
+          <legend>Données météo</legend>
+          <div class="grid2">
+            <label>Source
+              <select name="ui.weather_source">
+                <option value="auto">Automatique (Open-Meteo, puis NASA POWER)</option>
+                <option value="openmeteo">Open-Meteo (ERA5)</option>
+                <option value="nasapower">NASA POWER</option>
+                <option value="pvgis">Fichier PVGIS (année type)</option>
+              </select>
+            </label>
+            <label data-show-weather="remote">Année<input name="ui.weather_year" type="number" step="1" min="2001" /></label>
+          </div>
+          <div data-show-weather="pvgis" hidden>
+            <label>Fichier TMY PVGIS (CSV ou JSON)<input id="pvgis-file" type="file" accept=".csv,.json,text/csv,application/json" /></label>
+            <p class="hint">PVGIS n'autorise pas les appels directs depuis un navigateur. Sur
+              <a href="https://re.jrc.ec.europa.eu/pvg_tools/fr/" target="_blank" rel="noopener">PVGIS</a>,
+              onglet « TMY », choisissez le site puis téléchargez le fichier CSV ou JSON.</p>
+          </div>
+          <div id="weather-status" class="status-line" aria-live="polite"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Installation</legend>
+          <div class="grid2">
+            <label>Puissance crête (kWc)<input name="pv.peak_power_kwc" type="number" step="any" value="6" /><small class="err" data-error-for="pv.peak_power_kwc"></small></label>
+            <label>Inclinaison (°)<input name="pv.tilt_deg" type="number" step="any" value="30" /><small class="err" data-error-for="pv.tilt_deg"></small></label>
+            <label>Azimut (°)<input name="pv.azimuth_deg" type="number" step="any" value="180" /><small class="hint">0 nord, 90 est, 180 sud, 270 ouest</small><small class="err" data-error-for="pv.azimuth_deg"></small></label>
+            <label>Pertes système (%)<input name="pv.system_losses_pct" type="number" step="any" value="14" /><small class="err" data-error-for="pv.system_losses_pct"></small></label>
+          </div>
+          <details>
+            <summary>Paramètres avancés</summary>
+            <div class="grid2">
+              <label>Coef. de température (%/°C)<input name="pv.gamma_pdc_pct_per_c" type="number" step="any" value="-0.37" /><small class="err" data-error-for="pv.gamma_pdc_pct_per_c"></small></label>
+              <label>Ratio DC/AC<input name="pv.dc_ac_ratio" type="number" step="any" value="1.1" /><small class="err" data-error-for="pv.dc_ac_ratio"></small></label>
+              <label>Rendement onduleur (%)<input name="pv.inverter_efficiency_pct" type="number" step="any" value="96" /><small class="err" data-error-for="pv.inverter_efficiency_pct"></small></label>
+              <label>Albédo du sol<input name="pv.albedo" type="number" step="any" value="0.2" /><small class="err" data-error-for="pv.albedo"></small></label>
+              <label>Faiman U0 (W/m²K)<input name="pv.faiman_u0" type="number" step="any" value="25" /><small class="err" data-error-for="pv.faiman_u0"></small></label>
+              <label>Faiman U1 (W·s/m³K)<input name="pv.faiman_u1" type="number" step="any" value="6.84" /><small class="err" data-error-for="pv.faiman_u1"></small></label>
+            </div>
+          </details>
+        </fieldset>
+
+        <fieldset>
+          <legend>Batterie</legend>
+          <label class="check"><input name="ui.battery_enabled" type="checkbox" /> Ajouter une batterie</label>
+          <div class="grid2" data-show-battery hidden>
+            <label>Capacité (kWh)<input name="battery.capacity_kwh" type="number" step="any" value="5" /><small class="err" data-error-for="battery.capacity_kwh"></small></label>
+            <label>Puissance (kW)<input name="battery.power_kw" type="number" step="any" value="2.5" /><small class="err" data-error-for="battery.power_kw"></small></label>
+            <label>Rendement aller-retour (%)<input name="battery.round_trip_efficiency_pct" type="number" step="any" value="90" /><small class="err" data-error-for="battery.round_trip_efficiency_pct"></small></label>
+            <label>État de charge min. (%)<input name="battery.min_soc_pct" type="number" step="any" value="10" /><small class="err" data-error-for="battery.min_soc_pct"></small></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Consommation</legend>
+          <div class="segmented" role="radiogroup" aria-label="Mode de consommation">
+            <label><input type="radio" name="load.mode" value="profile" checked /> Profil simplifié</label>
+            <label><input type="radio" name="load.mode" value="csv" /> Courbe de charge (CSV)</label>
+          </div>
+          <div data-show-load="profile">
+            <label>Consommation annuelle (kWh)<input name="load.annual_kwh" type="number" step="any" value="4500" /><small class="err" data-error-for="load.annual_kwh"></small></label>
+            <p class="hint">Profil illustratif (pointes matin et soir, plus fort en hiver), non issu de mesures. Pour un résultat fiable, importez votre courbe de charge.</p>
+          </div>
+          <div data-show-load="csv" hidden>
+            <div class="grid2">
+              <label>Fichier CSV<input id="load-file" type="file" accept=".csv,.txt,text/csv" /></label>
+              <label>Unité des valeurs
+                <select name="ui.load_unit">
+                  <option value="w">Puissance moyenne (W), ex. export Enedis</option>
+                  <option value="kw">Puissance moyenne (kW)</option>
+                  <option value="kwh">Énergie par pas de temps (kWh)</option>
+                </select>
+              </label>
+            </div>
+            <p class="hint">1re colonne : date et heure de début du pas (1 h ou moins), 2e colonne : valeur. Séparateur détecté automatiquement.</p>
+            <div id="load-status" class="status-line" aria-live="polite"></div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Économie</legend>
+          <div class="grid2">
+            <label>Coût PV (€/kWc)<input name="economics.pv_capex_eur_per_kwc" type="number" step="any" value="1700" /><small class="err" data-error-for="economics.pv_capex_eur_per_kwc"></small></label>
+            <label>Coûts fixes (€)<input name="economics.fixed_capex_eur" type="number" step="any" value="2000" /><small class="hint">pose, raccordement, démarches</small><small class="err" data-error-for="economics.fixed_capex_eur"></small></label>
+            <label>Coût batterie (€/kWh)<input name="economics.battery_capex_eur_per_kwh" type="number" step="any" value="600" /><small class="err" data-error-for="economics.battery_capex_eur_per_kwh"></small></label>
+            <label>Prix d'achat électricité (€/kWh)<input name="economics.electricity_price_eur_per_kwh" type="number" step="any" value="0.2016" /><small class="err" data-error-for="economics.electricity_price_eur_per_kwh"></small></label>
+            <label>Tarif de revente (€/kWh)<input name="economics.export_tariff_eur_per_kwh" type="number" step="any" value="0.04" /><small class="err" data-error-for="economics.export_tariff_eur_per_kwh"></small></label>
+            <label>Aides (€)<input name="economics.subsidy_eur" type="number" step="any" value="0" /><small class="err" data-error-for="economics.subsidy_eur"></small></label>
+            <label>Durée d'étude (ans)<input name="economics.lifetime_years" type="number" step="1" value="25" /><small class="err" data-error-for="economics.lifetime_years"></small></label>
+          </div>
+          <p class="hint">Coûts par défaut : ordres de grandeur indicatifs, à remplacer par vos devis.</p>
+          <details>
+            <summary>Hypothèses financières</summary>
+            <div class="grid2">
+              <label>Maintenance (% invest./an)<input name="economics.opex_pct_of_capex" type="number" step="any" value="1" /><small class="err" data-error-for="economics.opex_pct_of_capex"></small></label>
+              <label>Évolution prix achat (%/an)<input name="economics.electricity_price_escalation_pct" type="number" step="any" value="2" /><small class="err" data-error-for="economics.electricity_price_escalation_pct"></small></label>
+              <label>Évolution tarif revente (%/an)<input name="economics.export_tariff_escalation_pct" type="number" step="any" value="0" /><small class="err" data-error-for="economics.export_tariff_escalation_pct"></small></label>
+              <label>Taux d'actualisation (%)<input name="economics.discount_rate_pct" type="number" step="any" value="4" /><small class="err" data-error-for="economics.discount_rate_pct"></small></label>
+              <label>Dégradation modules (%/an)<input name="economics.degradation_pct_per_year" type="number" step="any" value="0.5" /><small class="err" data-error-for="economics.degradation_pct_per_year"></small></label>
+              <label>Remplacement onduleur (année)<input name="economics.inverter_replacement_year" type="number" step="1" value="15" /><small class="hint">0 = jamais</small><small class="err" data-error-for="economics.inverter_replacement_year"></small></label>
+              <label>Coût onduleur (€/kWc)<input name="economics.inverter_replacement_eur_per_kwc" type="number" step="any" value="150" /><small class="err" data-error-for="economics.inverter_replacement_eur_per_kwc"></small></label>
+              <label>Durée de vie batterie (ans)<input name="economics.battery_lifetime_years" type="number" step="1" value="12" /><small class="hint">0 = pas de remplacement</small><small class="err" data-error-for="economics.battery_lifetime_years"></small></label>
+              <label>Remplacement batterie (% coût)<input name="economics.battery_replacement_pct" type="number" step="any" value="70" /><small class="err" data-error-for="economics.battery_replacement_pct"></small></label>
+            </div>
+          </details>
+        </fieldset>
+
+        <fieldset>
+          <legend>Optimisation du dimensionnement</legend>
+          <div class="grid2">
+            <label>Puissance min (kWc)<input name="optimisation.pv_min_kwc" type="number" step="any" value="1" /><small class="err" data-error-for="optimisation.pv_min_kwc"></small></label>
+            <label>Puissance max (kWc)<input name="optimisation.pv_max_kwc" type="number" step="any" value="9" /><small class="err" data-error-for="optimisation.pv_max_kwc"></small></label>
+            <label>Pas (kWc)<input name="optimisation.pv_step_kwc" type="number" step="any" value="0.5" /><small class="err" data-error-for="optimisation.pv_step_kwc"></small></label>
+            <label>Batteries testées (kWh)<input name="optimisation.battery_sizes_kwh" type="text" value="0 5 10" /><small class="hint">valeurs séparées par des espaces</small><small class="err" data-error-for="optimisation.battery_sizes_kwh"></small></label>
+            <label>Puissance / capacité (h⁻¹)<input name="optimisation.battery_c_rate" type="number" step="any" value="0.5" /><small class="err" data-error-for="optimisation.battery_c_rate"></small></label>
+            <label>Critère
+              <select name="optimisation.objective">
+                <option value="npv">VAN maximale</option>
+                <option value="irr">TRI maximal</option>
+              </select>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="actions">
+          <button type="submit" id="btn-simulate" class="btn-primary" disabled>Simuler</button>
+          <button type="button" id="btn-optimise" class="btn-secondary" disabled>Optimiser</button>
+          <button type="button" id="btn-reset" class="btn-link">Valeurs par défaut</button>
+        </div>
+      </form>
+
+      <section class="results" aria-live="polite">
+        <div id="messages"></div>
+
+        <div id="results-empty" class="panel empty">
+          <h2>Comment ça marche</h2>
+          <ol>
+            <li>Indiquez le site, l'installation et la consommation.</li>
+            <li><strong>Simuler</strong> télécharge une année de météo horaire, puis calcule heure par heure la production (modèles pvlib), l'autoconsommation et la rentabilité.</li>
+            <li><strong>Optimiser</strong> teste toutes les combinaisons de puissance et de batterie de la grille.</li>
+          </ol>
+          <p class="hint">Les calculs se font dans votre navigateur : aucune donnée n'est envoyée à un serveur, à part la requête météo (coordonnées et année).</p>
+        </div>
+
+        <div id="sim-results" hidden>
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Énergie</h2>
+              <button type="button" id="btn-export" class="btn-link">Exporter les données horaires (CSV)</button>
+            </div>
+            <p id="sim-context" class="hint"></p>
+            <div id="kpis-energy" class="kpis"></div>
+            <h3>Bilan mensuel</h3>
+            <div class="chart"><canvas id="chart-monthly" aria-label="Bilan énergétique mensuel"></canvas></div>
+            <h3>Journée moyenne</h3>
+            <div class="chart"><canvas id="chart-daily" aria-label="Profil journalier moyen"></canvas></div>
+          </div>
+          <div class="panel">
+            <h2>Rentabilité</h2>
+            <div id="kpis-eco" class="kpis"></div>
+            <h3>Trésorerie cumulée</h3>
+            <div class="chart"><canvas id="chart-cash" aria-label="Trésorerie cumulée"></canvas></div>
+          </div>
+        </div>
+
+        <div id="opt-results" class="panel" hidden>
+          <h2>Optimisation</h2>
+          <p id="opt-best"></p>
+          <div class="chart"><canvas id="chart-opt" aria-label="Résultat de l'optimisation"></canvas></div>
+          <div class="table-wrap">
+            <table id="opt-table">
+              <thead><tr><th>kWc</th><th>Batterie (kWh)</th><th>Invest.</th><th>VAN</th><th>TRI</th><th>Retour</th><th>Autocons.</th><th>Autoprod.</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p id="opt-count" class="hint"></p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Modèles <a href="https://pvlib-python.readthedocs.io/" target="_blank" rel="noopener">pvlib</a> exécutés dans le navigateur avec <a href="https://pyodide.org/" target="_blank" rel="noopener">Pyodide</a>.
+        Données : <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0, usage non commercial),
+        <a href="https://power.larc.nasa.gov/" target="_blank" rel="noopener">NASA POWER</a>,
+        <a href="https://re.jrc.ec.europa.eu/pvg_tools/" target="_blank" rel="noopener">PVGIS</a> © Union européenne.</p>
+      <p id="engine-versions" class="hint"></p>
+    </footer>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

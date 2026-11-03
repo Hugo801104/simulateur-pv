@@ -1,0 +1,10 @@
+[project]
+name = "pvsim"
+version = "1.0.0"
+description = "Moteur de simulation photovoltaïque (pvlib), exécutable sous CPython et Pyodide"
+requires-python = ">=3.12"
+dependencies = ["numpy", "scipy", "pandas", "pvlib"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error::FutureWarning"]
