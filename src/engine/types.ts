@@ -146,9 +146,22 @@ export interface AdviceResult {
     plateau: { min_kwc: number; max_kwc: number };
     break_even_capex_eur: number | null;
     profitable: boolean;
+    observed_price_range_eur: [number, number] | null;
+    water_heater_piloting: {
+      self_consumption_without: number;
+      self_consumption_with: number;
+      year1_gain_eur: number;
+      npv_gain_eur: number;
+    } | null;
   };
   roof: { max_panels: number; max_kwc: number; fit_panels: number; occupation: number; flat: boolean };
-  production: { specific_yield_kwh_per_kwc: number; ideal_yield_kwh_per_kwc: number; orientation_ratio: number };
+  production: {
+    specific_yield_kwh_per_kwc: number;
+    ideal_yield_kwh_per_kwc: number;
+    orientation_ratio: number;
+    yearly_yield: Record<string, number>;
+    representative_year: number;
+  };
   consumption: { annual_kwh: number; estimated: boolean; basis: string };
   options: AdviceRow[];
   grid: { panels: number; pv_kwc: number; battery_kwh: number; npv_eur: number; capex_eur: number }[];

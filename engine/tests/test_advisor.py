@@ -146,3 +146,72 @@ def test_break_even_capex_zeroes_npv(wx):
 def test_east_west_uses_even_panel_counts(wx):
     r = advisor.advise(house(orientation="EO", roof_area_m2=50), wx)
     assert all(row["panels"] % 2 == 0 for row in r["grid"])
+
+
+# --- Rapprochement avec les références (novembre 2026) -------------------------
+
+@pytest.fixture(scope="module")
+def wx_multi():
+    from conftest import read_fixture
+    return weather.parse("openmeteo", read_fixture("openmeteo_lyon_2021_2023.json"))
+
+
+def test_representative_year_is_scaled_to_multi_year_mean(wx_multi):
+    h = house()
+    rep = advisor.representative_year(wx_multi, advisor.Site(latitude=h.latitude, longitude=h.longitude),
+                                      advisor.geometry(h), K.MODULES["topcon"])
+    assert sorted(rep.yearly_yield) == [2021, 2022, 2023]
+    mean = sum(rep.yearly_yield.values()) / 3
+    assert rep.year == min(rep.yearly_yield, key=lambda y: abs(rep.yearly_yield[y] - mean))
+    # Profil final recalculé avec SPA : écart avec la moyenne (calculée avec ephemeris) < 0,2 %.
+    assert rep.pv_per_kwc.sum() * 8760 / len(rep.pv_per_kwc) == pytest.approx(mean, rel=2e-3)
+    assert len(rep.weather.data) >= 8700
+
+
+def test_advise_reports_yearly_variation(wx_multi):
+    r = advisor.advise(house(), wx_multi)
+    assert len(r["production"]["yearly_yield"]) == 3
+    assert any(a["title"] == "Variations d'une année à l'autre" for a in r["advice"])
+
+
+def test_water_heater_model_conserves_energy(wx):
+    h = house(electric_water_heater="oui", occupants=3)
+    loads = advisor.LoadModel(wx.data.index, h, 4500)
+    assert loads.ecs_annual == pytest.approx(1800)
+    pv = advisor.pv_profile_per_kwc(wx, advisor.Site(), advisor.geometry(h), K.MODULES["topcon"]) * 3
+    night, piloted = loads.profile(pv, piloted=False), loads.profile(pv, piloted=True)
+    assert night.sum() == pytest.approx(piloted.sum()) == pytest.approx(4500 * len(pv) / 8760, rel=1e-6)
+    # Sans pilotage : rien pendant la journée en plus du profil de base.
+    import numpy as np
+    local = wx.data.index.tz_convert(h.timezone)
+    day = ~np.isin(local.hour, K.OFFPEAK_HOURS)
+    assert np.allclose(night[day], loads.base[day])
+    # Avec pilotage : plus d'énergie consommée pendant la journée, jamais au-delà de la puissance du cumulus.
+    assert piloted[day].sum() > night[day].sum()
+    assert (piloted - loads.base).max() <= K.WATER_HEATER_POWER_KW + 1e-9
+
+
+def test_piloting_raises_self_consumption(wx):
+    r = advisor.advise(house(electric_water_heater="oui"), wx)
+    gain = r["recommendation"]["water_heater_piloting"]
+    assert gain["self_consumption_with"] > gain["self_consumption_without"]
+    assert gain["year1_gain_eur"] > 0
+    assert any(a["title"] == "Piloter le chauffe-eau électrique" for a in r["advice"])
+    assert advisor.advise(house(), wx)["recommendation"]["water_heater_piloting"] is None
+
+
+def test_observed_price_range():
+    lo, hi = K.observed_price_range(6.0)
+    assert (lo, hi) == (10867.0, 16000.0)
+    assert K.observed_price_range(12.0) is None
+    # Le modèle de prix reste dans la fourchette publiée.
+    for kwc in (3.0, 6.0, 9.0):
+        model = K.INSTALL_FIXED_EUR + K.INSTALL_EUR_PER_KWC * kwc
+        lo, hi = K.observed_price_range(kwc)
+        assert lo <= model <= hi
+
+
+def test_inverter_replacement_cost(wx):
+    econ = advisor.economics_for(3.08, K.MODULES["topcon"])
+    assert econ.inverter_replacement_year == K.INVERTER_REPLACEMENT_YEAR
+    assert econ.inverter_replacement_eur_per_kwc * 3.08 == pytest.approx(K.INVERTER_REPLACEMENT_EUR)

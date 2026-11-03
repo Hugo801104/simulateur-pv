@@ -40,10 +40,17 @@ export function renderAdvice(a: AdviceResult) {
     `sur ${a.roof.max_panels} panneaux possibles au maximum.`;
 
   const t = r.totals;
+  const yields = Object.values(a.production.yearly_yield);
+  const yieldHint = yields.length > 1
+    ? `moyenne de ${yields.length} ans : ${num(Math.min(...yields) * r.pv_kwc)} à ${num(Math.max(...yields) * r.pv_kwc)} kWh selon l'année`
+    : `${num(a.production.specific_yield_kwh_per_kwc)} kWh/kWc par an`;
+  const range = r.observed_price_range_eur;
+  const pilot = r.water_heater_piloting;
   $('reco-kpis').innerHTML = [
-    kpi('Production', kwh(t.pv_kwh), `${num(a.production.specific_yield_kwh_per_kwc)} kWh/kWc par an`),
-    kpi('Autoconsommation', pct(t.self_consumption_rate), `couvre ${pct(t.self_sufficiency_rate)} de vos besoins`),
-    kpi('Investissement estimé', eur(r.capex_eur), 'ordre de grandeur TTC'),
+    kpi('Production', kwh(t.pv_kwh), yieldHint),
+    kpi('Autoconsommation', pct(t.self_consumption_rate),
+      pilot ? `avec chauffe-eau piloté (${pct(pilot.self_consumption_without)} sans)` : `couvre ${pct(t.self_sufficiency_rate)} de vos besoins`),
+    kpi('Investissement estimé', eur(r.capex_eur), range ? `prix publiés : ${eur(range[0])} à ${eur(range[1])}` : 'ordre de grandeur TTC'),
     kpi('Gain la 1re année', eur(r.year1_savings_eur), `facture ${eur(r.year1_bill_without_pv_eur)} → ${eur(r.year1_bill_with_pv_eur)}`),
     kpi('Temps de retour', years(r.payback_years)),
     kpi('VAN sur 25 ans', `<span class="${r.npv_eur >= 0 ? 'pos' : 'neg'}">${eur(r.npv_eur)}</span>`,

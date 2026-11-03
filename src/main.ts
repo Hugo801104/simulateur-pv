@@ -117,15 +117,16 @@ async function ensureRemoteWeather(
   longitude: number,
   year: number,
   statusEl: HTMLElement,
+  startYear = year,
 ): Promise<string[]> {
-  const key = `${choice}|${latitude.toFixed(2)}|${longitude.toFixed(2)}|${year}`;
+  const key = `${choice}|${latitude.toFixed(2)}|${longitude.toFixed(2)}|${startYear}-${year}`;
   if (key === weatherKey) return [];
 
   setBusy(true, 'Téléchargement des données météo…');
   setStatus(statusEl, 'Téléchargement des données météo…');
   let response;
   try {
-    response = await fetchWeather(choice, { latitude, longitude, year }, weatherCache);
+    response = await fetchWeather(choice, { latitude, longitude, year, startYear }, weatherCache);
   } catch (err) {
     setStatus(statusEl, 'Données météo indisponibles.', 'bad');
     throw new UserError(
@@ -141,7 +142,7 @@ async function ensureRemoteWeather(
   const w = res.weather;
   setStatus(
     statusEl,
-    `Météo ${SOURCE_LABELS[response.source]} ${year}${response.fromCache ? ' (cache local)' : ''} · point ${num(w.latitude, 2)}, ${num(w.longitude, 2)} · ` +
+    `Météo ${SOURCE_LABELS[response.source]} ${startYear === year ? year : `${startYear}–${year}`}${response.fromCache ? ' (cache local)' : ''} · point ${num(w.latitude, 2)}, ${num(w.longitude, 2)} · ` +
       `${num(w.ghi_kwh_m2)} kWh/m²/an`,
     'ok',
   );
@@ -347,6 +348,7 @@ try {
 // --- Mode Conseil --------------------------------------------------------------
 const houseForm = $<HTMLFormElement>('house');
 const HOUSE_KEY = 'pvsim-house-v1';
+const WEATHER_YEARS = 10; // identique à knowledge.WEATHER_YEARS
 const houseField = (name: string) => houseForm.elements.namedItem(name) as HTMLInputElement;
 const addressInput = $<HTMLInputElement>('address');
 const addressStatus = $('address-status');
@@ -412,7 +414,9 @@ houseForm.addEventListener('submit', async (event) => {
     await ensureLocation();
     const lat = Number(houseField('house.latitude').value);
     const lon = Number(houseField('house.longitude').value);
-    const notes = await ensureRemoteWeather('auto', lat, lon, lastCompleteYear(), addressStatus);
+    // Plusieurs années de météo : le moteur en tire une année représentative (voir advisor.representative_year).
+    const lastYear = lastCompleteYear();
+    const notes = await ensureRemoteWeather('auto', lat, lon, lastYear, addressStatus, lastYear - WEATHER_YEARS + 1);
     setBusy(true, 'Comparaison des configurations…');
     const res = await engine.call('advise', JSON.stringify(collectHouse(formEntries(houseForm))));
     if (!res.ok) throw new EngineErrors(res.errors);

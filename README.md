@@ -24,8 +24,10 @@ Fonctionnalités :
 - Optimisation puissance × batterie sur une grille.
 - Fonctionne hors connexion une fois chargé (données météo en cache ou fichier PVGIS).
 
-Les choix d'architecture, les modèles, les hypothèses et la validation sont
-décrits dans [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Les choix d'architecture, les modèles et les hypothèses sont décrits dans
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ; la comparaison avec PVGIS et les estimations
+publiées (production sur 10 villes, autoconsommation, prix, rentabilité) dans
+[docs/VALIDATION.md](docs/VALIDATION.md).
 
 ## Démarrage rapide
 

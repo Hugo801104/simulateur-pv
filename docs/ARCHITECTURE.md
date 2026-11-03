@@ -157,7 +157,7 @@ Valeurs par défaut (vérifiées le 3 novembre 2026, détail et sources dans `pv
 électricité achetée 0,2001 €/kWh (tarif réglementé Base depuis le 1er août 2026) ; surplus vendu
 1,1 c€/kWh, +2 %/an pendant 20 ans puis non valorisé (arrêté du 1er juin 2026) ; installation
 3 000 € + 1 700 €/kWc TTC, droite ajustée sur des fourchettes de prix publiées pour 3 à 9 kWc ;
-batterie 600 €/kWh. Les coûts sont des **ordres de grandeur** à remplacer par des devis.
+batterie 800 €/kWh, onduleur remplacé la 12e année. Les coûts sont des **ordres de grandeur** à remplacer par des devis.
 
 **Optimisation** (`optimisation.py`) : recherche exhaustive sur la grille
 puissance × batterie (2 000 combinaisons au maximum), critère VAN ou TRI. Une
@@ -175,7 +175,9 @@ Le benchmark des outils existants qui a guidé la conception est dans [BENCHMARK
 | Adresse → coordonnées | `src/data/geocode.ts` | Géoplateforme IGN, autocomplétion |
 | Saisie et validation | `src/ui/form.ts` → `advisor.parse_house` | Toutes les erreurs par champ ; consommation obligatoire avec chauffage électrique ou PAC |
 | Géométrie | `advisor.geometry` | Pente → inclinaison, orientation (8 directions ou est + ouest), toit plat : supports à 10° sud ; nombre maximal de modules = surface × taux d'occupation ÷ surface d'un module |
+| Météo | `advisor.representative_year` | 10 ans d'Open-Meteo ; année la plus proche de la moyenne, ramenée à la moyenne (une seule année peut s'écarter de ±8 %) ; NASA POWER en secours, sur un an |
 | Production | `advisor.pv_profile_per_kwc` | Chaîne pvlib (§ 4) avec le coefficient de température du module ; deux pans : moitié de la puissance sur chacun |
+| Consommation | `advisor.LoadModel` | Profil simplifié ; chauffe-eau électrique chauffé la nuit, ou sur le surplus solaire s'il est piloté |
 | Évaluation | `advisor.evaluate_grid` | Toutes les tailles de 3 kWc au toit complet, au module près, × batterie 0 / 5 / 10 kWh ; TVA 20 % au-delà de 9 kWc |
 | Recommandation | `advisor.advise` | Meilleure VAN (sous budget éventuel), plage quasi équivalente, investissement d'équilibre (VAN = 0) |
 | Conseils | `advisor.build_advice`, `steps` | Règles explicites, chacune liée à ses sources ; niveaux « conseil », « à vérifier », « info » |

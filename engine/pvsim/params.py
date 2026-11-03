@@ -80,8 +80,9 @@ class Economics:
     fixed_capex_eur: float = _num(knowledge.INSTALL_FIXED_EUR, 0, 1e8, "Coûts fixes (€)")
     subsidy_eur: float = _num(0.0, 0, 1e8, "Aides (€)")
     opex_pct_of_capex: float = _num(1.0, 0, 20, "Maintenance (% de l'investissement / an)")
-    inverter_replacement_year: int = _num(15, 0, 60, "Remplacement onduleur (année, 0 = jamais)", integer=True)
-    inverter_replacement_eur_per_kwc: float = _num(150.0, 0, 5000, "Coût remplacement onduleur (€/kWc)")
+    inverter_replacement_year: int = _num(knowledge.INVERTER_REPLACEMENT_YEAR, 0, 60, "Remplacement onduleur (année, 0 = jamais)", integer=True)
+    # ≈ 1 000 € pour 6 kWc (voir knowledge.INVERTER_REPLACEMENT_EUR).
+    inverter_replacement_eur_per_kwc: float = _num(170.0, 0, 5000, "Coût remplacement onduleur (€/kWc)")
     battery_lifetime_years: int = _num(12, 0, 60, "Durée de vie batterie (ans, 0 = pas de remplacement)", integer=True)
     battery_replacement_pct: float = _num(70.0, 0, 200, "Coût remplacement batterie (% du coût initial)")
     electricity_price_eur_per_kwh: float = _num(knowledge.ELECTRICITY_PRICE_EUR_PER_KWH, 0, 5, "Prix de l'électricité achetée (€/kWh)")

@@ -45,12 +45,19 @@ class PVProfile:
         return float(self.poa_global.sum() / 1000.0 * 8760.0 / len(self.poa_global))
 
 
-def compute_pv_profile(weather: WeatherData, site: Site, pv: PVSystem) -> PVProfile:
+def compute_pv_profile(weather: WeatherData, site: Site, pv: PVSystem, solar_position_method: str = "nrel_numpy") -> PVProfile:
+    """Production horaire pour 1 kWc.
+
+    `solar_position_method` : "nrel_numpy" (NREL SPA, référence) par défaut. "ephemeris" est environ
+    6 fois plus rapide (écart mesuré ≤ 0,01° sur la hauteur du soleil) : utilisé seulement pour comparer
+    plusieurs années entre elles (advisor.representative_year).
+    """
     df = weather.data
     altitude = site.altitude if site.altitude is not None else (weather.elevation or 0.0)
     times = df.index + pd.Timedelta(minutes=weather.solar_offset_min)
 
-    solpos = pvlib.solarposition.get_solarposition(times, site.latitude, site.longitude, altitude=altitude)
+    solpos = pvlib.solarposition.get_solarposition(times, site.latitude, site.longitude, altitude=altitude,
+                                                    method=solar_position_method)
     dni_extra = pvlib.irradiance.get_extra_radiation(times).to_numpy()
     airmass = pvlib.atmosphere.get_relative_airmass(solpos["apparent_zenith"].to_numpy())
 

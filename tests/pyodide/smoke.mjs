@@ -60,6 +60,15 @@ const rec = advice.advice.recommendation;
 console.log(`[${elapsed()}] Conseil (${advice.advice.grid.length} configurations) : ${(performance.now() - t).toFixed(0)} ms — ` +
   `${rec.panels} panneaux, ${rec.pv_kwc} kWc, batterie ${rec.battery_kwh} kWh`);
 
+// Conseil sur plusieurs années de météo (année représentative) : temps de calcul réaliste.
+check('météo pluriannuelle', JSON.parse(engine.set_weather('openmeteo',
+  await readFile(join(root, 'engine', 'tests', 'fixtures', 'openmeteo_lyon_2021_2023.json'), 'utf8'))));
+t = performance.now();
+const multi = check('conseil pluriannuel', JSON.parse(engine.advise(JSON.stringify({ ...house, electric_water_heater: 'oui' }))));
+const years = Object.keys(multi.advice.production.yearly_yield).length;
+console.log(`[${elapsed()}] Conseil sur ${years} ans de météo : ${(performance.now() - t).toFixed(0)} ms ` +
+  `(≈ ${((performance.now() - t) * 10 / years / 1000).toFixed(1)} s pour 10 ans)`);
+
 const get = (obj, path) => path.split('.').reduce((o, k) => o[k], obj);
 let failures = 0;
 for (const [key, expected] of Object.entries(ref.expected)) {

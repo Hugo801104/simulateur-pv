@@ -19,7 +19,10 @@ export type SourceChoice = RemoteSource | 'auto';
 export interface WeatherRequest {
   latitude: number;
   longitude: number;
+  /** Dernière année demandée. */
   year: number;
+  /** Première année (plusieurs années d'un coup) ; par défaut `year`. */
+  startYear?: number;
 }
 
 export interface WeatherResponse {
@@ -39,14 +42,17 @@ export const AUTO_ORDER: RemoteSource[] = ['openmeteo', 'nasapower'];
 /** Coordonnées arrondies à 0,01° (~1 km) : meilleure réutilisation du cache, précision suffisante. */
 const round2 = (x: number) => (Math.round(x * 100) / 100).toFixed(2);
 
-export function buildUrl(source: RemoteSource, { latitude, longitude, year }: WeatherRequest): string {
+export function buildUrl(source: RemoteSource, { latitude, longitude, year, startYear }: WeatherRequest): string {
   const lat = round2(latitude);
   const lon = round2(longitude);
+  // NASA POWER refuse les longues périodes horaires (erreur 422 vérifiée pour 10 ans) :
+  // en secours, on se limite à la dernière année.
+  const first = source === 'nasapower' ? year : (startYear ?? year);
   if (source === 'openmeteo') {
     const q = new URLSearchParams({
       latitude: lat,
       longitude: lon,
-      start_date: `${year}-01-01`,
+      start_date: `${first}-01-01`,
       end_date: `${year}-12-31`,
       hourly: 'shortwave_radiation,direct_normal_irradiance,diffuse_radiation,temperature_2m,wind_speed_10m',
       wind_speed_unit: 'ms',
@@ -59,7 +65,7 @@ export function buildUrl(source: RemoteSource, { latitude, longitude, year }: We
     community: 'RE',
     latitude: lat,
     longitude: lon,
-    start: `${year}0101`,
+    start: `${first}0101`,
     end: `${year}1231`,
     format: 'JSON',
     'time-standard': 'UTC',
@@ -77,6 +83,9 @@ export function validateRequest(req: WeatherRequest, now = new Date()): string |
   if (!Number.isFinite(req.longitude) || Math.abs(req.longitude) > 180) return 'Longitude invalide.';
   const max = lastCompleteYear(now);
   if (!Number.isInteger(req.year) || req.year < 2001 || req.year > max) return `Année attendue entre 2001 et ${max}.`;
+  if (req.startYear !== undefined && (!Number.isInteger(req.startYear) || req.startYear < 2001 || req.startYear > req.year)) {
+    return `Première année attendue entre 2001 et ${req.year}.`;
+  }
   return null;
 }
 

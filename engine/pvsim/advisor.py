@@ -22,6 +22,7 @@ import math
 from dataclasses import dataclass, field
 
 import numpy as np
+import pandas as pd
 
 from . import economics, knowledge as K, load, physics
 from .params import Battery, Economics, PVSystem, Site, ValidationError, _parse_group
@@ -141,13 +142,114 @@ def geometry(house: House) -> Geometry:
     return Geometry(tilt=tilt, azimuths=azimuths, occupation=K.OCCUPATION["plat" if flat else "incline"], flat=flat)
 
 
-def pv_profile_per_kwc(weather: WeatherData, site: Site, geo: Geometry, module: K.ModuleClass) -> np.ndarray:
+def pv_profile_per_kwc(weather: WeatherData, site: Site, geo: Geometry, module: K.ModuleClass,
+                       solar_position_method: str = "nrel_numpy") -> np.ndarray:
     """Production AC horaire par kWc ; pour deux pans, moyenne des deux orientations (moitié de la puissance sur chacun)."""
     profiles = []
     for az in geo.azimuths:
         pv = PVSystem(tilt_deg=geo.tilt, azimuth_deg=az, gamma_pdc_pct_per_c=module.gamma_pdc_pct_per_c)
-        profiles.append(physics.compute_pv_profile(weather, site, pv).ac_kwh_per_kwc.to_numpy())
+        profiles.append(physics.compute_pv_profile(weather, site, pv, solar_position_method).ac_kwh_per_kwc.to_numpy())
     return np.mean(profiles, axis=0)
+
+
+@dataclass
+class RepresentativeYear:
+    """Météo d'une année « représentative » et production par kWc ramenée à la moyenne pluriannuelle."""
+
+    weather: WeatherData
+    pv_per_kwc: np.ndarray
+    yearly_yield: dict[int, float]  # productible de chaque année (kWh/kWc)
+    year: int
+    scale: float
+
+
+def representative_year(weather: WeatherData, site: Site, geo: Geometry, module: K.ModuleClass) -> RepresentativeYear:
+    """Choisit, parmi les années complètes, celle dont la production est la plus proche de la moyenne,
+    puis ajuste sa production à cette moyenne.
+
+    Une seule année météo peut s'écarter de ±8 % de la moyenne (mesuré sur 10 villes, 2016–2025) ;
+    garder le profil horaire d'une année réelle conserve la forme de la production (utile au
+    bilan heure par heure), et la mise à l'échelle corrige le niveau annuel.
+    """
+    idx = weather.data.index
+    if len(idx) < 2 * 8700:  # une seule année : calcul de référence direct
+        pv = pv_profile_per_kwc(weather, site, geo, module)
+        y = int(pd.Series(idx.year).mode()[0])
+        return RepresentativeYear(weather, pv, {y: float(pv.sum() * 8760.0 / len(pv))}, y, 1.0)
+    # Comparaison des années avec l'algorithme solaire rapide (voir physics.compute_pv_profile).
+    pv_all = pv_profile_per_kwc(weather, site, geo, module, "ephemeris")
+    years = {}
+    year_of = np.asarray(idx.year)
+    for y in np.unique(year_of):
+        mask = year_of == y
+        if mask.sum() >= 8700:  # année complète (à une heure près, selon la convention d'horodatage)
+            years[int(y)] = float(pv_all[mask].sum() * 8760.0 / mask.sum())
+    if len(years) <= 1:
+        y = next(iter(years), int(idx[0].year))
+        return RepresentativeYear(weather, pv_all, years or {y: float(pv_all.sum() * 8760.0 / len(pv_all))}, y, 1.0)
+    mean = float(np.mean(list(years.values())))
+    chosen = min(years, key=lambda y: abs(years[y] - mean))
+    mask = year_of == chosen
+    sub = dataclasses.replace(weather, data=weather.data[mask])
+    scale = mean / years[chosen]
+    # Profil de l'année retenue recalculé avec l'algorithme de référence (SPA), puis mis à l'échelle.
+    pv_ref = pv_profile_per_kwc(sub, site, geo, module)
+    return RepresentativeYear(sub, pv_ref * scale, years, chosen, scale)
+
+
+class LoadModel:
+    """Consommation horaire, avec ou sans pilotage du chauffe-eau électrique.
+
+    Sans pilotage, le chauffe-eau chauffe la nuit en heures creuses. Avec pilotage
+    (routeur ou gestionnaire d'énergie), son énergie quotidienne est d'abord prise sur
+    le surplus solaire de la journée, dans la limite de sa puissance ; le complément
+    est chauffé la nuit. L'énergie quotidienne est supposée constante sur l'année.
+    """
+
+    def __init__(self, index, house: "House", annual_kwh: float):
+        self.ecs_annual = water_heater_kwh(house, annual_kwh)
+        presence = house.daytime_presence == "oui"
+        self.base = load.simplified_profile(index, house.timezone, annual_kwh - self.ecs_annual, presence).to_numpy()
+        local = index.tz_convert(house.timezone)
+        dates = np.asarray(local.date)
+        self.day = np.unique(dates, return_inverse=True)[1]
+        n_days = int(self.day.max()) + 1
+        self.first_of_day = np.r_[True, self.day[1:] != self.day[:-1]]
+        offpeak = np.isin(local.hour, K.OFFPEAK_HOURS)
+        self.offpeak_count = np.bincount(self.day, weights=offpeak.astype(float), minlength=n_days)
+        self.offpeak = offpeak
+        self.daily = self.ecs_annual * len(index) / 8760.0 / n_days
+        self.n_days = n_days
+
+    @property
+    def has_water_heater(self) -> bool:
+        return self.ecs_annual > 0
+
+    def _night(self, per_day: np.ndarray) -> np.ndarray:
+        share = np.divide(per_day, self.offpeak_count, out=np.zeros_like(per_day), where=self.offpeak_count > 0)
+        return np.where(self.offpeak, share[self.day], 0.0)
+
+    def profile(self, pv_kwh: np.ndarray | None = None, piloted: bool = False) -> np.ndarray:
+        if not self.has_water_heater:
+            return self.base
+        if not piloted or pv_kwh is None:
+            return self.base + self._night(np.full(self.n_days, self.daily))
+        surplus = np.clip(pv_kwh - self.base, 0.0, K.WATER_HEATER_POWER_KW)
+        cum = np.cumsum(surplus)
+        start = np.r_[0.0, cum][np.flatnonzero(self.first_of_day)]
+        cum_day = cum - start[self.day]
+        taken_cum = np.minimum(cum_day, self.daily)
+        prev = np.r_[0.0, taken_cum[:-1]]
+        prev[self.first_of_day] = 0.0
+        absorbed = taken_cum - prev
+        remaining = self.daily - np.bincount(self.day, weights=absorbed, minlength=self.n_days)
+        return self.base + absorbed + self._night(np.clip(remaining, 0.0, None))
+
+
+def water_heater_kwh(house: "House", annual_kwh: float) -> float:
+    if house.electric_water_heater != "oui":
+        return 0.0
+    return min(K.WATER_HEATER_KWH_PER_PERSON * house.occupants, K.WATER_HEATER_MAX_SHARE * annual_kwh)
 
 
 def economics_for(kwc: float, module: K.ModuleClass) -> Economics:
@@ -160,10 +262,12 @@ def economics_for(kwc: float, module: K.ModuleClass) -> Economics:
         fixed_capex_eur=K.INSTALL_FIXED_EUR * factor,
         battery_capex_eur_per_kwh=K.BATTERY_EUR_PER_KWH,
         degradation_pct_per_year=module.degradation_pct_per_year,
+        inverter_replacement_year=K.INVERTER_REPLACEMENT_YEAR,
+        inverter_replacement_eur_per_kwc=K.INVERTER_REPLACEMENT_EUR / kwc,
     )
 
 
-def break_even_capex(row: dict, pv_per_kwc: np.ndarray, load_kwh: np.ndarray, module: K.ModuleClass) -> float | None:
+def break_even_capex(row: dict, module: K.ModuleClass) -> float | None:
     """Investissement total en dessous duquel la VAN devient positive (VAN linéaire en investissement)."""
     kwc, battery_kwh = row["pv_kwc"], row["battery_kwh"]
     base = economics_for(kwc, module)
@@ -186,13 +290,14 @@ def panel_range(module: K.ModuleClass, n_max: int, pans: int) -> range:
     return range(n_min, n_max + 1, step)
 
 
-def evaluate_grid(pv_per_kwc: np.ndarray, load_kwh: np.ndarray, module: K.ModuleClass, sizes: range) -> list[dict]:
+def evaluate_grid(pv_per_kwc: np.ndarray, loads: LoadModel, module: K.ModuleClass, sizes: range, piloted: bool) -> list[dict]:
     rows = []
     for battery_kwh in BATTERY_SIZES_KWH:
         battery = Battery(capacity_kwh=battery_kwh, power_kw=battery_kwh * BATTERY_C_RATE)
         for n in sizes:
             kwc = round(n * module.power_wc / 1000.0, 3)
-            flows = simulate(pv_per_kwc * kwc, load_kwh, battery)
+            pv_kwh = pv_per_kwc * kwc
+            flows = simulate(pv_kwh, loads.profile(pv_kwh, piloted), battery)
             totals = flows.totals()
             eco = economics.evaluate(economics_for(kwc, module), kwc, battery_kwh, totals)
             rows.append({
@@ -414,17 +519,21 @@ def advise(house: House, weather: WeatherData) -> dict:
     n_max = min(n_fit, MAX_PANELS)
 
     annual_kwh, estimated, consumption_basis = estimate_consumption(house)
-    index = weather.data.index
-    load_kwh = load.simplified_profile(index, house.timezone, annual_kwh, daytime_presence=house.daytime_presence == "oui").to_numpy()
 
-    pv_per_kwc = pv_profile_per_kwc(weather, site, geo, module)
+    rep = representative_year(weather, site, geo, module)
+    weather = rep.weather
+    pv_per_kwc = rep.pv_per_kwc
+    index = weather.data.index
+    loads = LoadModel(index, house, annual_kwh)
+    piloted = loads.has_water_heater  # le gestionnaire d'énergie est requis pour la TVA à 5,5 %
+
     ideal = physics.compute_pv_profile(weather, site, PVSystem(tilt_deg=30, azimuth_deg=180,
                                                                 gamma_pdc_pct_per_c=module.gamma_pdc_pct_per_c))
     specific_yield = float(pv_per_kwc.sum() * 8760.0 / len(pv_per_kwc))
-    orientation_ratio = specific_yield / ideal.annual_yield()
+    orientation_ratio = (specific_yield / rep.scale) / ideal.annual_yield()
 
     sizes = panel_range(module, n_max, len(geo.azimuths))
-    rows = evaluate_grid(pv_per_kwc, load_kwh, module, sizes)
+    rows = evaluate_grid(pv_per_kwc, loads, module, sizes, piloted)
     notes: list[str] = []
     if sizes.start * module.power_wc / 1000.0 < PRICE_MODEL_MIN_KWC:
         notes.append("Le toit ne permet pas 3 kWc : les prix sont extrapolés hors des fourchettes publiées, "
@@ -450,7 +559,7 @@ def advise(house: House, weather: WeatherData) -> dict:
     if rec["panels"] == sizes.start and sizes.start > MIN_PANELS and len(sizes) > 1:
         notes.append(f"La recommandation est la plus petite taille étudiée ({_fr(rec['pv_kwc'])} kWc). Les installations "
                      "plus petites ne sont pas évaluées, faute de prix publiés fiables : demandez un devis si vous les envisagez.")
-    target_capex = break_even_capex(rec, pv_per_kwc, load_kwh, module)
+    target_capex = break_even_capex(rec, module)
     profitable = rec["npv_eur"] >= 0
     if not profitable:
         notes.append("Avec ces hypothèses de prix, aucune configuration n'est rentable sur 25 ans : la recommandation est "
@@ -469,22 +578,66 @@ def advise(house: House, weather: WeatherData) -> dict:
         add_option("max_9kwc", "Meilleure jusqu'à 9 kWc", _best([r for r in candidates if r["pv_kwc"] <= K.VAT_REDUCED_MAX_KWC]))
 
     advice = build_advice(house, geo, module, rec, best_no_batt, best_batt, n_max, orientation_ratio, estimated)
+
+    # Fourchette des prix publiés pour la puissance recommandée (hors batterie).
+    price_range = K.observed_price_range(rec["pv_kwc"])
+    battery_cost = rec["battery_kwh"] * K.BATTERY_EUR_PER_KWH
     if target_capex is not None:
         verb = "reste rentable" if profitable else "devient rentable"
-        advice.insert(0, _item(
-            "finances", "Prix de devis à viser",
-            f"Pour {_fr(rec['pv_kwc'])} kWc{f' avec {_fr(rec['battery_kwh'])} kWh de batterie' if rec['battery_kwh'] else ''}, "
-            f"le projet {verb} (VAN positive sur 25 ans) si le devis total est inférieur à environ "
-            f"{_int(target_capex)} € TTC, soit {_int(target_capex / rec['pv_kwc'])} €/kWc. Estimation retenue : "
-            f"{_int(rec['capex_eur'])} €.",
-            "attention" if not profitable else "conseil", ("prix_installation",)))
+        text = (f"Pour {_fr(rec['pv_kwc'])} kWc{f' avec {_fr(rec['battery_kwh'])} kWh de batterie' if rec['battery_kwh'] else ''}, "
+                f"le projet {verb} (VAN positive sur 25 ans) si le devis total est inférieur à environ "
+                f"{_int(target_capex)} € TTC. Estimation retenue : {_int(rec['capex_eur'])} €.")
+        level = "attention" if not profitable else "conseil"
+        if price_range is not None:
+            lo, hi = (p + battery_cost for p in price_range)
+            text += f" Les prix publiés pour cette puissance vont de {_int(lo)} à {_int(hi)} €"
+            if target_capex < lo:
+                text += " : la cible est sous les prix les plus bas observés, la rentabilité est donc peu probable aujourd'hui."
+            elif target_capex < hi:
+                text += " : la cible est atteignable en comparant plusieurs devis."
+            else:
+                text += " : même un devis élevé resterait rentable."
+        advice.insert(0, _item("finances", "Prix de devis à viser", text, level,
+                               ("prix_installation", "prix_potentiel_solaire", "prix_edf_solutions")))
+
+    # Pilotage du chauffe-eau : gain mesuré par rapport à un chauffage la nuit.
+    pilot_gain = None
+    if loads.has_water_heater:
+        rec_pv0 = pv_per_kwc * rec["pv_kwc"]
+        battery0 = Battery(capacity_kwh=rec["battery_kwh"], power_kw=rec["battery_kw"])
+        night = simulate(rec_pv0, loads.profile(rec_pv0, piloted=False), battery0).totals()
+        eco_night = economics.evaluate(economics_for(rec["pv_kwc"], module), rec["pv_kwc"], rec["battery_kwh"], night)
+        pilot_gain = {
+            "self_consumption_without": night["self_consumption_rate"],
+            "self_consumption_with": rec["totals"]["self_consumption_rate"],
+            "year1_gain_eur": rec["year1_savings_eur"] - eco_night["year1_savings_eur"],
+            "npv_gain_eur": rec["npv_eur"] - eco_night["npv_eur"],
+        }
+        advice.insert(1, _item(
+            "autoconsommation", "Piloter le chauffe-eau électrique",
+            f"Faire chauffer l'eau avec le surplus solaire (routeur ou gestionnaire d'énergie) plutôt que la nuit fait passer "
+            f"l'autoconsommation de {_pct(pilot_gain['self_consumption_without'])} à {_pct(pilot_gain['self_consumption_with'])} "
+            f"et rapporte environ {_int(pilot_gain['year1_gain_eur'])} € de plus par an. Les résultats ci-dessus supposent ce "
+            f"pilotage, exigé de toute façon pour la TVA à 5,5 % (gestion de l'énergie). Chauffe-eau estimé à "
+            f"{_int(loads.ecs_annual)} kWh/an.", "conseil", ("conso_chauffe_eau", "tva_55")))
+
+    values = list(rep.yearly_yield.values())
+    if len(values) > 1:
+        advice.append(_item(
+            "production", "Variations d'une année à l'autre",
+            f"Production calculée sur {len(values)} années de météo ({min(rep.yearly_yield)}–{max(rep.yearly_yield)}) : "
+            f"{_int(specific_yield)} kWh/kWc en moyenne, de {_int(min(values))} à {_int(max(values))} kWh/kWc selon l'année. "
+            f"Les résultats utilisent l'année {rep.year}, la plus proche de la moyenne, ramenée à cette moyenne.",
+            "info"))
     used = sorted({s for item in advice for s in item["sources"]} | {s for st in steps(house, rec["pv_kwc"]) for s in st["sources"]})
 
     def slim(r: dict) -> dict:
         return {k: v for k, v in r.items() if k != "cumulative_eur"}
 
     # Production mensuelle de la recommandation (heure locale).
-    rec_flows = simulate(pv_per_kwc * rec["pv_kwc"], load_kwh, Battery(capacity_kwh=rec["battery_kwh"], power_kw=rec["battery_kw"]))
+    rec_pv = pv_per_kwc * rec["pv_kwc"]
+    rec_battery = Battery(capacity_kwh=rec["battery_kwh"], power_kw=rec["battery_kw"])
+    rec_flows = simulate(rec_pv, loads.profile(rec_pv, piloted), rec_battery)
     month = index.tz_convert(house.timezone).month
     monthly = {"month": list(range(1, 13))}
     for name, arr in (("pv_kwh", rec_flows.pv), ("load_kwh", rec_flows.load), ("direct_kwh", rec_flows.direct),
@@ -503,11 +656,14 @@ def advise(house: House, weather: WeatherData) -> dict:
             "plateau": plateau,
             "break_even_capex_eur": target_capex,
             "profitable": profitable,
+            "observed_price_range_eur": (None if price_range is None else [p + battery_cost for p in price_range]),
+            "water_heater_piloting": pilot_gain,
         },
         "roof": {"max_panels": n_max, "max_kwc": n_max * module.power_wc / 1000.0, "fit_panels": n_fit,
                  "occupation": geo.occupation, "flat": geo.flat},
         "production": {"specific_yield_kwh_per_kwc": specific_yield, "ideal_yield_kwh_per_kwc": ideal.annual_yield(),
-                       "orientation_ratio": orientation_ratio},
+                       "orientation_ratio": orientation_ratio, "yearly_yield": {str(k): v for k, v in rep.yearly_yield.items()},
+                       "representative_year": rep.year},
         "consumption": {"annual_kwh": annual_kwh, "estimated": estimated, "basis": consumption_basis},
         "options": [{"key": o["key"], "label": o["label"], **slim(o["row"])} for o in options],
         "grid": [{"panels": r["panels"], "pv_kwc": r["pv_kwc"], "battery_kwh": r["battery_kwh"], "npv_eur": r["npv_eur"],
@@ -529,8 +685,13 @@ def assumptions(geo: Geometry) -> list[str]:
         f"Électricité achetée : {K.ELECTRICITY_PRICE_EUR_PER_KWH} €/kWh (tarif réglementé Base), +2 %/an.",
         f"Surplus vendu {K.EXPORT_TARIFF_EUR_PER_KWH * 100:.1f} c€/kWh, +{K.EXPORT_TARIFF_INDEXATION_PCT:g} %/an pendant "
         f"{K.EXPORT_CONTRACT_YEARS} ans, puis non valorisé. Étude sur 25 ans, actualisation 4 %, "
-        "maintenance 1 %/an de l'investissement, remplacement de l'onduleur la 15e année.",
+        f"maintenance 1 %/an de l'investissement, remplacement de l'onduleur ({_int(K.INVERTER_REPLACEMENT_EUR)} €) "
+        f"la {K.INVERTER_REPLACEMENT_YEAR}e année.",
         f"Tailles étudiées à partir de {PRICE_MODEL_MIN_KWC:g} kWc (domaine des prix publiés) jusqu'au toit complet.",
         f"Occupation du pan : {_pct(geo.occupation)} de la surface indiquée (marges, espacements), à confirmer par le calepinage de l'installateur.",
-        "Météo réelle de la dernière année complète ; profil de consommation simplifié ; ombrage non modélisé ; pertes système 14 %.",
+        f"Météo : {K.WEATHER_YEARS} dernières années complètes ; année la plus proche de la moyenne, ramenée à la moyenne. "
+        "Profil de consommation simplifié ; ombrage non modélisé ; pertes système 14 %.",
+        f"Chauffe-eau électrique : {_int(K.WATER_HEATER_KWH_PER_PERSON)} kWh par personne et par an (au plus "
+        f"{_pct(K.WATER_HEATER_MAX_SHARE)} de la consommation), chauffé la nuit (22 h–6 h) sans pilotage, sur le surplus "
+        f"solaire avec pilotage (puissance {_fr(K.WATER_HEATER_POWER_KW)} kW).",
     ]

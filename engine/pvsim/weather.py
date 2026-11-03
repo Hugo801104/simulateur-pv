@@ -62,7 +62,9 @@ class WeatherData:
             "start": idx[0].isoformat(),
             "end": idx[-1].isoformat(),
             "hours": int(len(idx)),
-            "ghi_kwh_m2": float(self.data["ghi"].sum() / 1000.0),
+            # Irradiation annuelle moyenne (la série peut couvrir plusieurs années).
+            "ghi_kwh_m2": float(self.data["ghi"].sum() / 1000.0 * 8760.0 / len(idx)),
+            "years": round(len(idx) / 8766.0, 1),
             "temp_mean_c": float(self.data["temp_air"].mean()),
             "notes": list(self.notes),
         }

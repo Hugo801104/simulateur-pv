@@ -17,6 +17,15 @@ describe('buildUrl', () => {
     expect(url.searchParams.get('hourly')).toContain('direct_normal_irradiance');
   });
 
+  it('demande plusieurs années d’un coup', () => {
+    const url = new URL(buildUrl('openmeteo', { ...REQ, startYear: 2014 }));
+    expect(url.searchParams.get('start_date')).toBe('2014-01-01');
+    expect(url.searchParams.get('end_date')).toBe('2023-12-31');
+    expect(validateRequest({ ...REQ, startYear: 2024 })).toMatch(/Première année/);
+    // NASA POWER : une seule année (les longues périodes horaires sont refusées).
+    expect(new URL(buildUrl('nasapower', { ...REQ, startYear: 2014 })).searchParams.get('start')).toBe('20230101');
+  });
+
   it('construit une requête NASA POWER en UTC', () => {
     const url = new URL(buildUrl('nasapower', REQ));
     expect(url.host).toBe('power.larc.nasa.gov');

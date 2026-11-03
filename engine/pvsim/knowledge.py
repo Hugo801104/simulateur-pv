@@ -68,6 +68,34 @@ SOURCES: dict[str, dict[str, str]] = {
         "title": "Ordres de grandeur de consommation par taille de foyer (comparateurs d'énergie)",
         "url": "https://www.fournisseurs-electricite.com/compteur/consommation-electrique/2-personnes",
     },
+    "prix_potentiel_solaire": {
+        "title": "Potentiel Solaire – prix 2026 d'une installation posée (3, 6, 9 kWc)",
+        "url": "https://www.potentielsolaire.com/prix-panneaux-solaires",
+    },
+    "prix_edf_solutions": {
+        "title": "EDF Solutions Solaires – prix 2026 pour 3, 6 et 9 kWc",
+        "url": "https://www.edf-solutions-solaires.com/guide-solaire/prix-panneau-solaire-3kwc-6kwc-9kwc/",
+    },
+    "prix_batterie": {
+        "title": "Selectra – batterie domestique après la réforme 2026 (≈ 700 à 1 000 €/kWh installé)",
+        "url": "https://selectra.info/energie/actualites/renovation-energetique/batterie-domestique-rentable-apres-reforme-2026",
+    },
+    "onduleur_remplacement": {
+        "title": "Prix-pose – remplacement de l'onduleur après 10 à 12 ans (800 à 1 200 € TTC)",
+        "url": "https://www.prix-pose.com/panneaux-solaires-apercu/prix-pour-maison-100m2",
+    },
+    "conso_chauffe_eau": {
+        "title": "Selectra – consommation d'un chauffe-eau électrique (400 à 800 kWh par personne et par an)",
+        "url": "https://selectra.info/energie/guides/conso/chauffe-eau-electrique",
+    },
+    "autoconsommation_typique": {
+        "title": "Hello Watt – taux d'autoconsommation typique sans batterie (≈ 40 %)",
+        "url": "https://www.hellowatt.fr/blog/autoconsommation-electrique-photovoltaique",
+    },
+    "pvgis_tool": {
+        "title": "PVGIS – Commission européenne (référence de production)",
+        "url": "https://re.jrc.ec.europa.eu/pvg_tools/fr/",
+    },
     "geoportail_urbanisme": {
         "title": "Géoportail de l'urbanisme – vérifier PLU et servitudes (secteur protégé)",
         "url": "https://www.geoportail-urbanisme.gouv.fr/",
@@ -90,7 +118,44 @@ VAT_REDUCED_MAX_KWC = 9.0
 # taux réduit (≤ 9 kWc) ; au-delà de 9 kWc, la TVA à 20 % est appliquée.
 INSTALL_FIXED_EUR = 3000.0
 INSTALL_EUR_PER_KWC = 1700.0
-BATTERY_EUR_PER_KWH = 600.0  # ordre de grandeur, à confirmer par devis
+# Comparaison (novembre 2026) : cette droite donne 8 100 / 13 200 / 18 300 € pour
+# 3 / 6 / 9 kWc, soit la médiane des trois sources ci-dessous.
+# Prix TTC centraux relevés (3, 6, 9 kWc) ; milieu de fourchette quand seule une fourchette est publiée.
+PRICE_REFERENCES = {
+    "prix_potentiel_solaire": (6752.0, 10867.0, 14032.0),
+    "prix_installation": (8250.0, 13250.0, 18500.0),  # La Prime Énergie, milieux de fourchettes
+    "prix_edf_solutions": (9000.0, 16000.0, 19000.0),  # EDF Solutions Solaires, milieux de fourchettes
+}
+PRICE_REFERENCE_KWC = (3.0, 6.0, 9.0)
+
+BATTERY_EUR_PER_KWH = 800.0  # milieu de la fourchette 600–1 000 €/kWh installé
+
+# Remplacement de l'onduleur central : 800 à 1 200 € TTC après 10 à 12 ans.
+INVERTER_REPLACEMENT_EUR = 1000.0
+INVERTER_REPLACEMENT_YEAR = 12
+
+# Chauffe-eau électrique : 400 à 800 kWh par personne et par an selon les sources ;
+# valeur centrale retenue, plafonnée à une part de la consommation totale.
+WATER_HEATER_KWH_PER_PERSON = 600.0
+WATER_HEATER_MAX_SHARE = 0.5
+# Hypothèses de modélisation (non sourcées, usuelles) : puissance d'un cumulus
+# et plage d'heures creuses nocturnes pendant laquelle il chauffe sans pilotage.
+WATER_HEATER_POWER_KW = 2.4
+OFFPEAK_HOURS = (22, 23, 0, 1, 2, 3, 4, 5)
+
+# Météo : nombre d'années utilisées pour l'année représentative du mode Conseil.
+WEATHER_YEARS = 10
+
+
+def observed_price_range(kwc: float) -> tuple[float, float] | None:
+    """Fourchette des prix relevés pour une puissance (interpolation linéaire, 3 à 9 kWc)."""
+    lo_k, hi_k = PRICE_REFERENCE_KWC[0], PRICE_REFERENCE_KWC[-1]
+    if not lo_k <= kwc <= hi_k:
+        return None
+    import numpy as np
+
+    values = [float(np.interp(kwc, PRICE_REFERENCE_KWC, pts)) for pts in PRICE_REFERENCES.values()]
+    return min(values), max(values)
 
 # Surcharge typique d'une pose en surimposition (modules + fixations).
 SURIMPOSITION_LOAD_KG_M2 = (15, 20)
